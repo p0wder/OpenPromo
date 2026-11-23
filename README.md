@@ -44,7 +44,7 @@ A supplier that can't answer a question says so (`404 not_offered`) before askin
 | --- | --- | --- |
 | `invalid` | 400 | The request can't be sent as it stands. Nothing reached the supplier. |
 | `unauthorized` | 401 | Missing or wrong OpenPromo API key. |
-| `orders_off` | 403 | Placing orders is switched off on this server. |
+| `orders_off` | 403 | Placing orders with this supplier is switched off on this server. The message names the supplier and `OPENPROMO_ORDERS`. |
 | `unknown_supplier` / `not_offered` / `unknown_route` | 404 | No such supplier on this server, it doesn't answer that question, or no such path. |
 | `not_found` / `not_yet` | 404 | The supplier has no such item, or it hasn't shipped or been invoiced yet. |
 | `duplicate` | 409 | The supplier already has a live order under that PO number. Nothing was sent. |
@@ -64,7 +64,7 @@ A supplier that can't answer a question says so (`404 not_offered`) before askin
 | `GET /v1/ssactivewear/native/products/{styleId}` | S&S's own products answer: every SKU, its field names, dollars |
 | `POST /v1/ssactivewear/orders` | Place an S&S order |
 
-Placing orders is off unless `OPENPROMO_ORDERS=on`.
+Placing orders is off unless the supplier is listed in `OPENPROMO_ORDERS` (see [Placing orders](#placing-orders)).
 
 ## Run it
 
@@ -108,7 +108,7 @@ Every `/v1` call needs the server's API key, plus the login of the account it is
 | `{SUPPLIER}_{FIELD}` | | An optional default login, for requests that send none (self-hosting for one account). The supplier id upper-cased, dashes as underscores, then the field: `SANMAR_CUSTOMER_NUMBER`, `SANMAR_USERNAME`, `SANMAR_PASSWORD`; `SSACTIVEWEAR_ACCOUNT_NUMBER`, `SSACTIVEWEAR_API_KEY`; `ALPHA_BRODER_ID`, `ALPHA_BRODER_PASSWORD`. Set all of a supplier's fields or none. |
 | `{SUPPLIER}_ENVIRONMENT` | | That supplier's default environment: `production`, or its test environment (`edev` for SanMar, `test` for PromoStandards suppliers that list test URLs). |
 | `SANMAR_WAREHOUSE_SELECTION` | | The default for `X-SanMar-Warehouse-Selection`: `on` only if SanMar set the account up for Warehouse Selection. |
-| `OPENPROMO_ORDERS` | | `on` lets the order routes place real orders. It's off by default. |
+| `OPENPROMO_ORDERS` | | The suppliers that may place real orders, as comma-separated ids (`sanmar,ssactivewear,acme`). `on` means SanMar and S&S Activewear only, the written drivers that take orders, never a directory supplier. Unset or `off` means none. An id this server doesn't serve stops it at start. |
 | `OPENPROMO_ENABLED_SUPPLIERS` | | Comma-separated ids: serve only these (default: every supplier). |
 | `OPENPROMO_SUPPLIERS` | | Your own PromoStandards suppliers, as JSON (see below). |
 | `PORT`, `HOST` | | For the Node server. Defaults are `8787` and `0.0.0.0`. |
@@ -181,6 +181,8 @@ Every client takes the login it should use and keeps no state, so one process ca
 
 ## Placing orders
 
+Ordering is switched on per supplier. `OPENPROMO_ORDERS` lists the ids that may place real orders: `OPENPROMO_ORDERS=sanmar` lets SanMar order and refuses S&S. `on` means SanMar and S&S Activewear, the suppliers with written drivers, and never a directory supplier, so an install that had `on` orders from just those two as before. `on` combines with ids (`on,acme`). Unset or `off` means no supplier orders. An id that isn't a supplier on this server (a typo, or one left out by `OPENPROMO_ENABLED_SUPPLIERS`) is a config error at start, naming it. A supplier that isn't listed answers every order route with `403 orders_off`, naming the supplier and the variable, before anything reaches it. `GET /v1/suppliers/{id}` says whether it may order here (`ordersAllowed`, and `allowed` on each of its write routes).
+
 Both order routes check the order before sending (anything over the supplier's limits, a bad ZIP or an unknown ship method comes back `invalid`, with nothing placed), merge identical lines, and say every change they made in `changes`. Both first ask the supplier for live orders under the PO number and refuse with 409 if there are any. A send the supplier didn't answer (`unreachable` or `bad_response`) may still have gone through: look the PO up before sending again.
 
 **SanMar** (`POST /v1/sanmar/orders`):
@@ -230,6 +232,8 @@ Every shape comes from the suppliers' published guides, and S&S's catalog calls 
 - **S&S style lookups by name.** `/v2/styles/{identifier}` with a part number or "Brand Style" (numeric style ids are proven).
 
 ## Changes
+
+**Unreleased.** `OPENPROMO_ORDERS` is a list of the suppliers that may order (`on` still means SanMar and S&S). `orders_off` names the supplier. `GET /v1/suppliers/{id}` gives `ordersAllowed`. In the library, `ServerConfig.allowOrders` is now `orders` (a set of ids), checked with `mayOrder(config, id)`.
 
 **0.2.0.** One API for every supplier. S&S Activewear. The supplier directory and registry. `GET /v1/sanmar/products/{style}` now answers the shared `Product` (from SanMar's PromoStandards Product Data); SanMar's Product Info moved to `/v1/sanmar/native/product-info/{style}`, and `pricing` without `priceType` to `/v1/sanmar/native/pricing/{style}`. `/health` reports a count of suppliers, not their ids.
 

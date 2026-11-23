@@ -9,7 +9,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { OpenPromoError, type OpenPromoErrorKind } from "../errors.js";
 import type { InvoiceQuery, MediaType, PriceType } from "../promostandards/types.js";
 import { CAPABILITIES, type Capability, type DriverRoute, type SupplierConnection } from "../suppliers/driver.js";
-import { connectionFor, environmentHeader, type ServerConfig, type SupplierDef } from "./config.js";
+import { connectionFor, environmentHeader, mayOrder, ordersOffMessage, type ServerConfig, type SupplierDef } from "./config.js";
 import { openApiDocument } from "./openapi.js";
 
 export const VERSION = "0.2.0";
@@ -77,8 +77,9 @@ function matchRoute(pattern: string, rest: readonly string[]): Record<string, st
 }
 
 /** What the supplier list says about one supplier: never a login, only which headers carry one. */
-export function describeSupplier(def: SupplierDef, config: Pick<ServerConfig, "allowOrders">, detail = false) {
+export function describeSupplier(def: SupplierDef, config: Pick<ServerConfig, "orders">, detail = false) {
   const { driver } = def;
+  const allowed = mayOrder(config, def.id);
   return {
     id: def.id,
     name: def.name,
@@ -92,7 +93,9 @@ export function describeSupplier(def: SupplierDef, config: Pick<ServerConfig, "a
           login: driver.login.map((f) => ({ header: f.header, label: f.label })),
           environments: driver.environments,
           environmentHeader: environmentHeader(driver),
-          routes: (driver.routes ?? []).map((r) => ({ method: r.method, path: `/v1/${def.id}/${r.path}`, summary: r.summary, ...(r.write ? { write: true, allowed: config.allowOrders } : {}) })),
+          // Whether this supplier may place real orders on this server (OPENPROMO_ORDERS).
+          ordersAllowed: allowed,
+          routes: (driver.routes ?? []).map((r) => ({ method: r.method, path: `/v1/${def.id}/${r.path}`, summary: r.summary, ...(r.write ? { write: true, allowed } : {}) })),
           ...(driver.website ? { website: driver.website } : {}),
           ...(driver.notes ? { notes: driver.notes } : {}),
         }
@@ -146,7 +149,7 @@ export function createHandler(config: ServerConfig, opts: HandlerOptions = {}): 
       if (r.method !== method) continue;
       const params = matchRoute(r.path, rest);
       if (!params) continue;
-      if (r.write && !config.allowOrders) return fail("orders_off", "Placing orders is switched off on this server. Set OPENPROMO_ORDERS=on to allow it.");
+      if (r.write && !mayOrder(config, def.id)) return fail("orders_off", ordersOffMessage(def), { supplier: def.id });
       const connection = connectionFor(def, req.headers, config);
       const answer = await r.handle({
         connection,
