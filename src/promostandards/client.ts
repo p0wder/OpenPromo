@@ -6,10 +6,11 @@
  * account and many clients serve many.
  *
  * Built: Product Data 2.0.0, Inventory 2.0.0, Pricing and Configuration
- * 1.0.0, Order Status 1.0.0 and 2.0.0, Order Shipment Notification 1.0.0,
- * Invoice 1.0.0. Request and response shapes follow the PromoStandards
+ * 1.0.0, Order Status 1.0.0 and 2.0.0, Order Shipment Notification 1.0.0 and
+ * 2.0.0, Invoice 1.0.0. Request and response shapes follow the PromoStandards
  * schemas as SanMar's Web Services Integration Guide v24.7 (Oct 2026) prints
- * them; each parser reads both the 1.x and 2.x spellings where they differ.
+ * them (Order Shipment Notification 2.0.0: the official OSN 2.0.0 schema);
+ * each parser reads both the 1.x and 2.x spellings where they differ.
  */
 import { OpenPromoError, type OpenPromoErrorKind } from "../errors.js";
 import { asArray, node, soapRequest, text, type SoapBody, type XmlNode } from "../soap.js";
@@ -27,6 +28,8 @@ import type {
   PromoStandardsService,
   SalesOrder,
   Shipment,
+  ShipmentPackage,
+  ShippingAddress,
 } from "./types.js";
 
 export interface PromoStandardsEndpoint {
@@ -140,6 +143,13 @@ const SPECS: Record<PromoStandardsService, Record<string, ServiceSpec>> = {
       response: "GetOrderShipmentNotificationResponse",
       soapAction: "getOrderShipmentNotification",
       ownFields: ["queryType", "referenceNumber", "shipmentDateTimeStamp"],
+    },
+    // The OSN 2.0.0 schema puts every request field in SharedObjects, and spells it `shipmentDateTimestamp`.
+    "2.0.0": {
+      namespace: (v) => `${PS}/OrderShipmentNotificationService/${v}/`,
+      request: "GetOrderShipmentNotificationRequest",
+      response: "GetOrderShipmentNotificationResponse",
+      soapAction: "getOrderShipmentNotification",
     },
   },
   invoices: {
@@ -291,6 +301,7 @@ export function parseOrderStatusV2(res: XmlNode): OrderStatus[] {
 
 /* ---------------------------------------------------------------- Other services */
 
+/** Order Shipment Notification 1.0.0 (packages under `ShipmentLocationArray`). */
 export function parseShipments(res: XmlNode): Shipment[] {
   return list(res, "OrderShipmentNotificationArray", "OrderShipmentNotification").flatMap((n) =>
     list(n, "SalesOrderArray", "SalesOrder").map((so) => ({
@@ -306,6 +317,72 @@ export function parseShipments(res: XmlNode): Shipment[] {
           items: list(p, "ItemArray", "Item").map((i) => ({ productId: opt(i.supplierProductId), partId: opt(i.supplierPartId), quantity: num(i.quantity) ?? 0 })),
         })),
       ),
+    })),
+  );
+}
+
+/** An OSN 2.x `ShippingContactDetails`, or undefined when it has no street, city or postal code. */
+function shippingAddress(v: unknown): ShippingAddress | undefined {
+  const a = node(v);
+  if (!a || !(text(a.address1) || text(a.city) || text(a.postalCode))) return undefined;
+  const out: ShippingAddress = { address1: text(a.address1), city: text(a.city), region: text(a.region), postalCode: text(a.postalCode) };
+  for (const k of ["attentionTo", "companyName", "address2", "address3", "country", "email", "phone"] as const) {
+    const s = opt(a[k]);
+    if (s) out[k] = s;
+  }
+  return out;
+}
+
+/**
+ * Order Shipment Notification 2.0.0: `SalesOrderArray` → `ShipmentArray`
+ * (one per destination, with its addresses) → `PackageArray` → `ItemArray`.
+ * Carrier and service come from `FreightDetails`, quantities from
+ * `Quantity { value, uom }`. The optional fields are set only when sent.
+ */
+export function parseShipmentsV2(res: XmlNode): Shipment[] {
+  return list(res, "OrderShipmentNotificationArray", "OrderShipmentNotification").flatMap((n) =>
+    list(n, "SalesOrderArray", "SalesOrder").map((so) => ({
+      purchaseOrderNumber: text(n.purchaseOrderNumber),
+      salesOrderNumber: text(so.salesOrderNumber),
+      complete: yes(so.salesOrderShippedInFull),
+      packages: list(so, "ShipmentArray", "Shipment").flatMap((sh) => {
+        const shipFrom = shippingAddress(sh.shipFromAddress);
+        const shipTo = shippingAddress(sh.shipToAddress);
+        const destinationType = opt(sh.shipmentDestinationType);
+        const pickup = text(sh.customerPickup);
+        return list(sh, "PackageArray", "Package").map((p): ShipmentPackage => {
+          const freight = child(p, "FreightDetails");
+          const size = child(child(p, "Dimension"), "DimensionSize");
+          const weight = child(child(p, "Dimension"), "DimensionWeight");
+          const weightValue = num(weight?.weight);
+          const dims = { length: num(size?.length), width: num(size?.width), height: num(size?.height) };
+          const pkg: ShipmentPackage = {
+            trackingNumber: text(p.trackingNumber),
+            carrier: opt(freight?.carrier),
+            method: opt(freight?.service),
+            shippedOn: day(p.shipmentDate),
+            items: list(p, "ItemArray", "Item").map((i) => {
+              const uom = opt(child(i, "Quantity")?.uom);
+              const lineNumber = opt(i.purchaseOrderLineNumber);
+              return { productId: opt(i.supplierProductId), partId: opt(i.supplierPartId), quantity: quantity(i) ?? 0, ...(uom ? { uom } : {}), ...(lineNumber ? { lineNumber } : {}) };
+            }),
+          };
+          if (shipFrom) pkg.shipFrom = shipFrom;
+          if (shipTo) pkg.shipTo = shipTo;
+          if (destinationType) pkg.destinationType = destinationType;
+          if (pickup) pkg.customerPickup = yes(pickup);
+          if (weightValue !== undefined) pkg.weight = { value: weightValue, uom: text(weight?.weightUOM) };
+          if (size && Object.values(dims).some((d) => d !== undefined)) {
+            pkg.dimensions = { uom: text(size.dimUOM) };
+            for (const [k, d] of Object.entries(dims) as [keyof typeof dims, number | undefined][]) if (d !== undefined) pkg.dimensions[k] = d;
+          }
+          const account = opt(p.shippingAccount);
+          const terms = opt(p.shipmentTerms);
+          if (account) pkg.shippingAccount = account;
+          if (terms) pkg.shipmentTerms = terms;
+          return pkg;
+        });
+      }),
     })),
   );
 }
@@ -563,14 +640,19 @@ export class PromoStandardsClient {
   }
 
   /**
-   * Order Shipment Notification (1.0.0): packages and tracking, by PO number,
-   * order number, or shipped since a time (7 days at most). Empty when
-   * nothing has shipped yet.
+   * Order Shipment Notification (1.0.0 and 2.0.0): packages and tracking, by
+   * PO number, order number, or shipped since a time (7 days at most). Empty
+   * when nothing has shipped yet. 2.0.0 also gives addresses, weight,
+   * dimensions and freight terms per package.
    */
   async getShipments(query: OrderQuery): Promise<Shipment[]> {
-    const q = "poNumber" in query ? { queryType: 1, referenceNumber: query.poNumber } : "salesOrderNumber" in query ? { queryType: 2, referenceNumber: query.salesOrderNumber } : { queryType: 3, shipmentDateTimeStamp: query.since };
+    const { ep } = this.endpoint("shipments");
+    const v1 = ep.version === "1.0.0";
+    const since = v1 ? "shipmentDateTimeStamp" : "shipmentDateTimestamp";
+    const q = "poNumber" in query ? { queryType: 1, referenceNumber: query.poNumber } : "salesOrderNumber" in query ? { queryType: 2, referenceNumber: query.salesOrderNumber } : { queryType: 3, [since]: query.since };
     try {
-      return parseShipments(await this.call("shipments", q));
+      const res = await this.call("shipments", q);
+      return v1 ? parseShipments(res) : parseShipmentsV2(res);
     } catch (e) {
       if (e instanceof OpenPromoError && (e.kind === "not_found" || e.kind === "not_yet")) return [];
       throw e;

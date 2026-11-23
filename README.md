@@ -130,7 +130,18 @@ There are three ways, from least to most work.
 ]
 ```
 
-Services and versions OpenPromo talks: Product Data 2.0.0, Inventory 2.0.0, Pricing and Configuration 1.0.0, Order Status 1.0.0 and 2.0.0, Order Shipment Notification 1.0.0, Invoice 1.0.0. A config with a version it can't talk or a URL that isn't `https` is refused at start.
+Services and versions OpenPromo talks (the `endpoints` key, then the versions):
+
+| Service | `endpoints` key | Versions |
+| --- | --- | --- |
+| Product Data | `productData` | 2.0.0 |
+| Inventory | `inventory` | 2.0.0 |
+| Pricing and Configuration | `pricing` | 1.0.0 |
+| Order Status | `orderStatus` | 1.0.0, 2.0.0 |
+| Order Shipment Notification | `shipments` | 1.0.0, 2.0.0 (2.0.0 also gives each package's ship-from and ship-to addresses, weight, dimensions and freight terms) |
+| Invoice | `invoices` | 1.0.0 |
+
+A config with a version it can't talk or a URL that isn't `https` is refused at start.
 
 **3. A supplier with its own API.** Write a driver (`src/suppliers/driver.ts` is the whole contract) and add it to `NATIVE_DRIVERS` in `src/suppliers/registry.ts`. A driver says:
 
