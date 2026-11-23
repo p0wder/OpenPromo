@@ -64,10 +64,7 @@ describe("syncing from PromoStandards' repository", () => {
 
   it("SanMar's own listing gives exactly the endpoints OpenPromo's SanMar driver uses", () => {
     const { listings } = listingsFromRepository([{ code: "SanMar", name: "SanMar", type: "Supplier" }], new Map([["SanMar", readEndpoints(JSON.parse(fixture("promostandards-repository/sanmar-endpoints.json")))]]));
-    // SanMar's listing also offers Media Content 1.1.0, which its driver doesn't use yet (Story 16.2).
-    const { media, ...rest } = listings[0]!.endpoints;
-    expect(rest).toEqual(SANMAR_PROMOSTANDARDS.endpoints);
-    expect(media).toEqual({ version: "1.1.0", url: "https://ws.sanmar.com:8080/promostandards/MediaContentServiceBinding", testUrl: "https://edev-ws.sanmar.com:8080/promostandards/MediaContentServiceBinding" });
+    expect(listings[0]!.endpoints).toEqual(SANMAR_PROMOSTANDARDS.endpoints);
   });
 
   it("keeps the highest version OpenPromo talks, live suppliers only; reports everything it leaves out", () => {

@@ -41,6 +41,8 @@ export const SANMAR_PROMOSTANDARDS: PromoStandardsSupplier = {
     orderStatus: ps("2.0.0", "OrderStatusServiceBindingV2"),
     shipments: ps("1.0.0", "OrderShipmentNotificationServiceBinding"),
     invoices: ps("1.0.0", "InvoiceServiceBindingV1_0_0"),
+    // Media Content 1.1.0, as SanMar's PromoStandards directory listing gives it. SanMar's driver doesn't answer media from it.
+    media: ps("1.1.0", "MediaContentServiceBinding"),
   },
   // SanMar's prices don't vary by warehouse: any valid FOB id will do (guide p71).
   defaultFobId: "1",
