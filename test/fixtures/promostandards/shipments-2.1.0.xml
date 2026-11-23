@@ -1,0 +1,51 @@
+<!-- source: OSN 2.1.0 schema (GetOrderShipmentNotificationResponse.xsd and SharedOSNObjects.xsd, promostandards.org promostandards-ordershipmentnotificationv2.1-806efa40caad.zip), not a live answer: element names, order and namespaces as the schema gives them (every element below the response in SharedObjects, unlike 2.0.0), values made up -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:GetOrderShipmentNotificationResponse xmlns:ns2="http://www.promostandards.org/WSDL/OrderShipmentNotificationService/2.1.0/" xmlns:ns3="http://www.promostandards.org/WSDL/OrderShipmentNotificationService/2.1.0/SharedObjects/">
+ <ns3:OrderShipmentNotificationArray><ns3:OrderShipmentNotification>
+  <ns3:purchaseOrderNumber>PO2101</ns3:purchaseOrderNumber><ns3:purchaseOrderShippedInFull>false</ns3:purchaseOrderShippedInFull>
+  <ns3:SalesOrderArray>
+   <ns3:SalesOrder>
+    <ns3:salesOrderNumber>SO-210</ns3:salesOrderNumber><ns3:salesOrderShippedInFull>true</ns3:salesOrderShippedInFull>
+    <ns3:ShipmentArray><ns3:Shipment>
+     <ns3:destinationShippedInFull>true</ns3:destinationShippedInFull><ns3:customerPickup>false</ns3:customerPickup>
+     <ns3:shipFromAddress><ns3:companyName>Acme Promo DC</ns3:companyName><ns3:address1>100 Warehouse Way</ns3:address1><ns3:city>Irving</ns3:city><ns3:region>TX</ns3:region><ns3:postalCode>75038</ns3:postalCode><ns3:country>US</ns3:country></ns3:shipFromAddress>
+     <ns3:shipToAddress><ns3:attentionTo>Receiving</ns3:attentionTo><ns3:companyName>Ink Shop</ns3:companyName><ns3:address1>12 Main St</ns3:address1><ns3:city>Jacksonville</ns3:city><ns3:region>FL</ns3:region><ns3:postalCode>32218</ns3:postalCode><ns3:country>US</ns3:country><ns3:email>receiving@inkshop.example</ns3:email></ns3:shipToAddress>
+     <ns3:shipmentDestinationType>Residential</ns3:shipmentDestinationType>
+     <ns3:PackageArray>
+      <ns3:Package>
+       <ns3:id>1</ns3:id><ns3:trackingNumber>9400111899223100012345</ns3:trackingNumber><ns3:shipmentDate>2026-11-22T10:15:00-06:00</ns3:shipmentDate>
+       <ns3:Dimension><ns3:DimensionSize><ns3:dimUOM>cm</ns3:dimUOM><ns3:length>40</ns3:length><ns3:width>30</ns3:width></ns3:DimensionSize><ns3:DimensionWeight><ns3:weightUOM>kg</ns3:weightUOM><ns3:weight>3.25</ns3:weight></ns3:DimensionWeight></ns3:Dimension>
+       <ns3:FreightDetails><ns3:carrier>USPS</ns3:carrier><ns3:service>Priority Mail</ns3:service></ns3:FreightDetails>
+       <ns3:shipmentTerms>Collect</ns3:shipmentTerms>
+       <ns3:ItemArray>
+        <ns3:Item><ns3:supplierProductId>PC54</ns3:supplierProductId><ns3:supplierPartId>538612</ns3:supplierPartId><ns3:distributorProductId>INK-PC54</ns3:distributorProductId><ns3:purchaseOrderLineNumber>1</ns3:purchaseOrderLineNumber><ns3:Quantity><ns3:value>48</ns3:value><ns3:uom>EA</ns3:uom></ns3:Quantity></ns3:Item>
+       </ns3:ItemArray>
+       <ns3:preProductionProof>No</ns3:preProductionProof>
+       <ns3:shipReferences>PO2101</ns3:shipReferences><ns3:shipReferences>DEPT 12</ns3:shipReferences>
+      </ns3:Package>
+     </ns3:PackageArray>
+    </ns3:Shipment></ns3:ShipmentArray>
+   </ns3:SalesOrder>
+   <ns3:SalesOrder>
+    <ns3:salesOrderNumber>SO-211</ns3:salesOrderNumber><ns3:salesOrderShippedInFull>false</ns3:salesOrderShippedInFull>
+    <ns3:ShipmentArray><ns3:Shipment>
+     <ns3:destinationShippedInFull>false</ns3:destinationShippedInFull><ns3:customerPickup>false</ns3:customerPickup>
+     <ns3:shipFromAddress><ns3:address1>100 Warehouse Way</ns3:address1><ns3:city>Irving</ns3:city><ns3:region>TX</ns3:region><ns3:postalCode>75038</ns3:postalCode></ns3:shipFromAddress>
+     <ns3:shipToAddress><ns3:address1>12 Main St</ns3:address1><ns3:city>Jacksonville</ns3:city><ns3:region>FL</ns3:region><ns3:postalCode>32218</ns3:postalCode></ns3:shipToAddress>
+     <ns3:PackageArray>
+      <ns3:Package>
+       <ns3:trackingNumber>1Z999AA10123456790</ns3:trackingNumber><ns3:shipmentDate>2026-11-22T16:40:00-06:00</ns3:shipmentDate>
+       <ns3:FreightDetails><ns3:carrier>UPS</ns3:carrier><ns3:service>2nd Day Air</ns3:service></ns3:FreightDetails>
+       <ns3:shippingAccount>ACCT-77</ns3:shippingAccount>
+       <ns3:ItemArray>
+        <ns3:Item><ns3:supplierProductId>K420</ns3:supplierProductId><ns3:supplierPartId>92032</ns3:supplierPartId><ns3:Quantity><ns3:value>1</ns3:value><ns3:uom>BX</ns3:uom></ns3:Quantity></ns3:Item>
+        <ns3:Item><ns3:supplierProductId>ST860</ns3:supplierProductId><ns3:purchaseOrderLineNumber>4</ns3:purchaseOrderLineNumber><ns3:Quantity><ns3:value>2.5</ns3:value><ns3:uom>DZ</ns3:uom></ns3:Quantity></ns3:Item>
+       </ns3:ItemArray>
+       <ns3:preProductionProof>Unknown</ns3:preProductionProof>
+      </ns3:Package>
+     </ns3:PackageArray>
+    </ns3:Shipment></ns3:ShipmentArray>
+   </ns3:SalesOrder>
+  </ns3:SalesOrderArray>
+ </ns3:OrderShipmentNotification></ns3:OrderShipmentNotificationArray>
+</ns2:GetOrderShipmentNotificationResponse></S:Body></S:Envelope>

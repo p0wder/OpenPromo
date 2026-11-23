@@ -99,6 +99,15 @@ describe("syncing from PromoStandards' repository", () => {
     expect(renderDirectoryData(listings, "2026-11-23")).toContain('{"id":"acme-promo","name":"Acme Promo, Inc.","code":"ACME","endpoints":{"orderStatus":{"version":"2.0.0","url":"https://acme.example/os2","testUrl":"https://test.acme.example/os2"}}},');
   });
 
+  it("a supplier listing OSN 1.0.0, 2.0.0 and 2.1.0 ends up on 2.1.0, whatever order they're listed in", () => {
+    const ep = (version: string, url: string, testUrl = "") => ({ service: "OSN", version, url, testUrl, status: "Production" });
+    const endpoints = new Map([["MULTI", [ep("2.1.0", "https://multi.example/osn21", "https://test.multi.example/osn21"), ep("1.0.0", "https://multi.example/osn1"), ep("2.0.0", "https://multi.example/osn2")]]]);
+    const { listings, skipped } = listingsFromRepository([{ code: "MULTI", name: "Multi Version Co", type: "Supplier" }], endpoints);
+    expect(listings).toEqual([{ id: "multi-version", name: "Multi Version Co", code: "MULTI", endpoints: { shipments: { version: "2.1.0", url: "https://multi.example/osn21", testUrl: "https://test.multi.example/osn21" } } }]);
+    expect(skipped).toEqual([]);
+    expect(checkSupplierConfig({ id: listings[0]!.id, name: listings[0]!.name, endpoints: listings[0]!.endpoints })).toEqual([]);
+  });
+
   it("two companies with the same name keep their codes apart", () => {
     const ep = [{ service: "INV", version: "2.0.0", url: "https://x.example/inv", testUrl: "", status: "Production" }];
     const { listings } = listingsFromRepository(

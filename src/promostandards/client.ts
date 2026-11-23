@@ -6,10 +6,11 @@
  * account and many clients serve many.
  *
  * Built: Product Data 2.0.0, Inventory 2.0.0, Pricing and Configuration
- * 1.0.0, Order Status 1.0.0 and 2.0.0, Order Shipment Notification 1.0.0 and
- * 2.0.0, Invoice 1.0.0. Request and response shapes follow the PromoStandards
- * schemas as SanMar's Web Services Integration Guide v24.7 (Oct 2026) prints
- * them (Order Shipment Notification 2.0.0: the official OSN 2.0.0 schema);
+ * 1.0.0, Order Status 1.0.0 and 2.0.0, Order Shipment Notification 1.0.0,
+ * 2.0.0 and 2.1.0, Invoice 1.0.0. Request and response shapes follow the
+ * PromoStandards schemas as SanMar's Web Services Integration Guide v24.7
+ * (Oct 2026) prints them (Order Shipment Notification 2.0.0 and 2.1.0: the
+ * official OSN schemas);
  * each parser reads both the 1.x and 2.x spellings where they differ.
  */
 import { OpenPromoError, type OpenPromoErrorKind } from "../errors.js";
@@ -146,6 +147,16 @@ const SPECS: Record<PromoStandardsService, Record<string, ServiceSpec>> = {
     },
     // The OSN 2.0.0 schema puts every request field in SharedObjects, and spells it `shipmentDateTimestamp`.
     "2.0.0": {
+      namespace: (v) => `${PS}/OrderShipmentNotificationService/${v}/`,
+      request: "GetOrderShipmentNotificationRequest",
+      response: "GetOrderShipmentNotificationResponse",
+      soapAction: "getOrderShipmentNotification",
+    },
+    // OSN 2.1.0 asks and answers getOrderShipmentNotification exactly as 2.0.0 does (the same request
+    // fields and answer tree); its schema only moves the answer's elements into SharedObjects, which
+    // reading ignores, and adds a package's `shipReferences`. Its other operations
+    // (sendAdvanceShipmentNotification, getServiceMethods) aren't used: OpenPromo only reads.
+    "2.1.0": {
       namespace: (v) => `${PS}/OrderShipmentNotificationService/${v}/`,
       request: "GetOrderShipmentNotificationRequest",
       response: "GetOrderShipmentNotificationResponse",
@@ -334,7 +345,7 @@ function shippingAddress(v: unknown): ShippingAddress | undefined {
 }
 
 /**
- * Order Shipment Notification 2.0.0: `SalesOrderArray` → `ShipmentArray`
+ * Order Shipment Notification 2.0.0 and 2.1.0: `SalesOrderArray` → `ShipmentArray`
  * (one per destination, with its addresses) → `PackageArray` → `ItemArray`.
  * Carrier and service come from `FreightDetails`, quantities from
  * `Quantity { value, uom }`. The optional fields are set only when sent.
@@ -640,10 +651,10 @@ export class PromoStandardsClient {
   }
 
   /**
-   * Order Shipment Notification (1.0.0 and 2.0.0): packages and tracking, by
-   * PO number, order number, or shipped since a time (7 days at most). Empty
-   * when nothing has shipped yet. 2.0.0 also gives addresses, weight,
-   * dimensions and freight terms per package.
+   * Order Shipment Notification (1.0.0, 2.0.0 and 2.1.0): packages and
+   * tracking, by PO number, order number, or shipped since a time (7 days at
+   * most). Empty when nothing has shipped yet. 2.x also gives addresses,
+   * weight, dimensions and freight terms per package.
    */
   async getShipments(query: OrderQuery): Promise<Shipment[]> {
     const { ep } = this.endpoint("shipments");
@@ -652,6 +663,7 @@ export class PromoStandardsClient {
     const q = "poNumber" in query ? { queryType: 1, referenceNumber: query.poNumber } : "salesOrderNumber" in query ? { queryType: 2, referenceNumber: query.salesOrderNumber } : { queryType: 3, [since]: query.since };
     try {
       const res = await this.call("shipments", q);
+      // 2.0.0 and 2.1.0 answer the same tree.
       return v1 ? parseShipments(res) : parseShipmentsV2(res);
     } catch (e) {
       if (e instanceof OpenPromoError && (e.kind === "not_found" || e.kind === "not_yet")) return [];
