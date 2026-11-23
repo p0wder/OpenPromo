@@ -27,8 +27,11 @@ export interface SupplierDef {
 export interface ServerConfig {
   /** Callers send one as `Authorization: Bearer <key>`. */
   apiKeys: string[];
-  /** Placing orders is off unless the owner turns it on. */
-  allowOrders: boolean;
+  /**
+   * The suppliers that may place real orders on this server (OPENPROMO_ORDERS).
+   * Empty unless the owner names them. Check it with `mayOrder`.
+   */
+  orders: ReadonlySet<string>;
   suppliers: Map<string, SupplierDef>;
   /** The environment variables, for drivers' own settings (never logins: those are read here). */
   env: Record<string, string | undefined>;
@@ -48,7 +51,41 @@ interface CustomSupplier extends PromoStandardsListing {
   environment?: "production" | "test";
 }
 
-const yes = (v: string | null | undefined) => /^(1|true|on|yes)$/i.test(v ?? "");
+/** OPENPROMO_ORDERS words for "the written drivers that take orders" and for "none" (`on` and `off` as before; the others as `on` and `off` were always read). */
+const ON = /^(1|true|on|yes)$/i;
+const OFF = /^(0|false|off|no)$/i;
+
+/**
+ * OPENPROMO_ORDERS: comma-separated supplier ids that may place real orders.
+ * `on` means the written drivers that take orders (SanMar and S&S Activewear),
+ * never a directory supplier, so an install that had `on` orders from the same
+ * suppliers as before. Unset or `off` means none. An id the server doesn't
+ * serve is a `ConfigError` naming it.
+ */
+function ordersFrom(value: string | undefined, drivers: SupplierDriver[]): Set<string> {
+  const words = (value ?? "").split(",").map((w) => w.trim()).filter(Boolean);
+  if (words.some((w) => OFF.test(w))) {
+    if (words.length > 1) throw new ConfigError("OPENPROMO_ORDERS: `off` can't be combined with supplier ids. Leave it unset or `off` for none, or list the ids that may order.");
+    return new Set();
+  }
+  const orders = new Set<string>();
+  const unknown: string[] = [];
+  for (const w of words) {
+    if (ON.test(w)) {
+      for (const d of drivers) if (d.kind === "native" && d.routes?.some((r) => r.write)) orders.add(d.id);
+    } else if (drivers.some((d) => d.id === w)) orders.add(w);
+    else unknown.push(w);
+  }
+  if (unknown.length) throw new ConfigError(`OPENPROMO_ORDERS names suppliers this server doesn't serve: ${unknown.join(", ")}. Use ids from GET /v1/suppliers (e.g. sanmar, ssactivewear), \`on\` for SanMar and S&S, or \`off\`.`);
+  return orders;
+}
+
+/** Whether this supplier may place real orders on this server. Every write route checks it for its own supplier. */
+export const mayOrder = (config: Pick<ServerConfig, "orders">, supplierId: string) => config.orders.has(supplierId);
+
+/** What a write route answers when its supplier may not order: the supplier, and the variable to set. */
+export const ordersOffMessage = (def: Pick<SupplierDef, "id" | "name">) =>
+  `Placing orders with ${def.name} is switched off on this server. Add ${def.id} to OPENPROMO_ORDERS (a comma-separated list of supplier ids) to allow it.`;
 
 /** The config from env, or a `ConfigError` saying exactly what's wrong. */
 export function loadConfig(env: Env = process.env, opts: { fetch?: typeof fetch; drivers?: SupplierDriver[] } = {}): ServerConfig {
@@ -95,7 +132,7 @@ export function loadConfig(env: Env = process.env, opts: { fetch?: typeof fetch;
     suppliers.set(driver.id, { id: driver.id, name: driver.name, driver, environment, defaultLogin });
   }
 
-  return { apiKeys, allowOrders: yes(env.OPENPROMO_ORDERS), suppliers, env, fetch: opts.fetch };
+  return { apiKeys, orders: ordersFrom(env.OPENPROMO_ORDERS, drivers), suppliers, env, fetch: opts.fetch };
 }
 
 /** The header that picks a supplier's environment. */

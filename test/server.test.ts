@@ -57,6 +57,24 @@ describe("config", () => {
     expect(() => loadConfig({ OPENPROMO_API_KEY: KEY, OPENPROMO_SUPPLIERS: JSON.stringify([{ ...acme, id: "sanmar" }]) })).toThrow(/has its own driver/);
   });
 
+  it("OPENPROMO_ORDERS lists the suppliers that may order; `on` is SanMar and S&S only; unset or `off` is none", () => {
+    const acme = JSON.stringify([{ id: "acme", name: "Acme Promo", endpoints: { inventory: { version: "2.0.0", url: "https://ps.acme.example/inventory" } } }]);
+    const orders = (value?: string, env: Record<string, string> = {}) => [...loadConfig({ OPENPROMO_API_KEY: KEY, OPENPROMO_SUPPLIERS: acme, ...env, ...(value === undefined ? {} : { OPENPROMO_ORDERS: value }) }).orders];
+    expect(orders()).toEqual([]);
+    expect(orders("off")).toEqual([]);
+    expect(orders("")).toEqual([]);
+    expect(orders("on")).toEqual(["sanmar", "ssactivewear"]);
+    expect(orders("true")).toEqual(["sanmar", "ssactivewear"]);
+    expect(orders("sanmar")).toEqual(["sanmar"]);
+    expect(orders(" acme , ssactivewear ")).toEqual(["acme", "ssactivewear"]);
+    expect(orders("on,acme")).toEqual(["sanmar", "ssactivewear", "acme"]);
+    // `on` is the written drivers this server serves, never a directory supplier.
+    expect(orders("on", { OPENPROMO_ENABLED_SUPPLIERS: "ssactivewear,acme" })).toEqual(["ssactivewear"]);
+    expect(() => orders("snamar")).toThrow(/OPENPROMO_ORDERS names suppliers this server doesn't serve: snamar/);
+    expect(() => orders("sanmar", { OPENPROMO_ENABLED_SUPPLIERS: "ssactivewear" })).toThrow(/doesn't serve: sanmar/);
+    expect(() => orders("off,sanmar")).toThrow(/`off` can't be combined/);
+  });
+
   it("OPENPROMO_ENABLED_SUPPLIERS keeps just those", () => {
     expect([...loadConfig({ OPENPROMO_API_KEY: KEY, OPENPROMO_ENABLED_SUPPLIERS: "ssactivewear" }).suppliers.keys()]).toEqual(["ssactivewear"]);
     expect(() => loadConfig({ OPENPROMO_API_KEY: KEY, OPENPROMO_ENABLED_SUPPLIERS: "nobody" })).toThrow(/doesn't have: nobody/);
@@ -120,6 +138,7 @@ describe("the API", () => {
     const one = await call("/v1/suppliers/ssactivewear");
     expect(one.body).toMatchObject({ id: "ssactivewear", environments: ["production"], environmentHeader: "X-Supplier-Environment", login: [{ header: "X-Supplier-Id", label: "S&S account number" }, { header: "X-Supplier-Password", label: "S&S API key" }] });
     expect(one.body.routes).toContainEqual({ method: "POST", path: "/v1/ssactivewear/orders", summary: expect.any(String), write: true, allowed: false });
+    expect(one.body.ordersAllowed).toBe(false);
     expect(await call("/v1/suppliers/nobody")).toMatchObject({ status: 404, body: { error: { kind: "unknown_supplier" } } });
   });
 
@@ -184,6 +203,27 @@ describe("the API", () => {
     const dup = server({ GetOrderStatusRequest: fixture("promostandards/order-status-2.0.0.xml"), submitPO: fixture("sanmar/submit-ok.xml") }, { OPENPROMO_ORDERS: "on" });
     expect(await dup.call("/v1/sanmar/orders", post({ ...order, poNumber: "SS3820" }))).toMatchObject({ status: 409, body: { error: { kind: "duplicate", orders: [{ salesOrderNumber: "100267568" }] } } });
     expect(dup.calls.map((c) => c.operation)).toEqual(["GetOrderStatusRequest"]);
+  });
+
+  it("ordering is switched on per supplier: OPENPROMO_ORDERS=sanmar lets SanMar order and refuses S&S, naming both and the variable", async () => {
+    const notThere = fixture("promostandards/error-301.xml").replaceAll("GetInvoicesResponse", "GetOrderStatusResponse");
+    const { call, calls } = server({ GetOrderStatusRequest: notThere, submitPO: fixture("sanmar/submit-ok.xml") }, { OPENPROMO_ORDERS: "sanmar" });
+    expect(await call("/v1/sanmar/orders", post(order))).toMatchObject({ status: 201, body: { accepted: true } });
+    const ssBody = { poNumber: "1042-10", shipTo: { address1: "12 Main St", city: "Austin", state: "TX", zip: "78701" }, lines: [{ sku: "B00760004", quantity: 6 }] };
+    const before = calls.length;
+    expect(await call("/v1/ssactivewear/orders", post(ssBody, SS_LOGIN))).toMatchObject({
+      status: 403,
+      body: { error: { kind: "orders_off", supplier: "ssactivewear", message: expect.stringMatching(/S&S Activewear.*ssactivewear to OPENPROMO_ORDERS/) } },
+    });
+    expect(calls).toHaveLength(before);
+    // The supplier page says who may order here.
+    const sanmar = (await call("/v1/suppliers/sanmar")).body;
+    expect(sanmar.ordersAllowed).toBe(true);
+    expect(sanmar.routes.filter((r: { write?: boolean }) => r.write).every((r: { allowed: boolean }) => r.allowed)).toBe(true);
+    const ss = (await call("/v1/suppliers/ssactivewear")).body;
+    expect(ss.ordersAllowed).toBe(false);
+    expect(ss.routes).toContainEqual(expect.objectContaining({ path: "/v1/ssactivewear/orders", allowed: false }));
+    expect((await call("/v1/suppliers/s-and-s-canada")).body.ordersAllowed).toBe(false);
   });
 
   it("logs method, path, status and time only", async () => {

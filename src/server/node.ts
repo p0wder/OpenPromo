@@ -49,4 +49,4 @@ createServer(async (req, res) => {
     if (!res.headersSent) res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: { kind: "internal", message: "Something went wrong in OpenPromo." } }));
   }
-}).listen(port, host, () => console.info(config ? `OpenPromo listening on http://${host}:${port} (suppliers: ${[...config.suppliers.keys()].join(", ")}; orders ${config.allowOrders ? "on" : "off"})` : `OpenPromo listening on http://${host}:${port}, not set up yet (every request answers 503)`));
+}).listen(port, host, () => console.info(config ? `OpenPromo listening on http://${host}:${port} (suppliers: ${[...config.suppliers.keys()].join(", ")}; orders ${config.orders.size ? `on for ${[...config.orders].join(", ")}` : "off"})` : `OpenPromo listening on http://${host}:${port}, not set up yet (every request answers 503)`));
