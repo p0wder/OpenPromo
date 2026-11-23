@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDirectory, loginEnvVar, NATIVE_DRIVERS, supplierDrivers } from "../src/index.js";
+import { buildDirectory, DIRECTORY, loginEnvVar, NATIVE_DRIVERS, supplierDrivers } from "../src/index.js";
 import { ConfigError, createHandler, loadConfig } from "../src/server/index.js";
 import { SS_ORDERS, SS_PO, SS_PRODUCTS, SS_STYLE, SS_STYLES } from "./fixtures/ssactivewear.js";
 import { basicUser, fakeRest, fakeSoap, fixture } from "./helpers.js";
@@ -112,6 +112,11 @@ describe("the API", () => {
     expect((await call("/v1/suppliers?search=s%26s")).body.suppliers.map((s: { id: string }) => s.id)).toEqual(["ssactivewear", "s-and-s-canada"]);
     expect((await call("/v1/suppliers?kind=promostandards&capability=invoices")).body.count).toBeGreaterThan(20);
     expect((await call("/v1/suppliers?capability=bogus")).status).toBe(400);
+    // Directory suppliers that list only Order Shipment Notification 2.x still answer shipments.
+    const onOsn2 = DIRECTORY.filter((d) => d.endpoints.shipments?.version.startsWith("2.")).map((d) => d.id);
+    expect(onOsn2.length).toBeGreaterThan(10);
+    const withShipments = (await call("/v1/suppliers?capability=shipments")).body.suppliers.map((s: { id: string }) => s.id);
+    expect(withShipments).toEqual(expect.arrayContaining(onOsn2));
     const one = await call("/v1/suppliers/ssactivewear");
     expect(one.body).toMatchObject({ id: "ssactivewear", environments: ["production"], environmentHeader: "X-Supplier-Environment", login: [{ header: "X-Supplier-Id", label: "S&S account number" }, { header: "X-Supplier-Password", label: "S&S API key" }] });
     expect(one.body.routes).toContainEqual({ method: "POST", path: "/v1/ssactivewear/orders", summary: expect.any(String), write: true, allowed: false });
