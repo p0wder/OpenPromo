@@ -138,7 +138,7 @@ Services and versions OpenPromo talks (the `endpoints` key, then the versions):
 | Inventory | `inventory` | 2.0.0 |
 | Pricing and Configuration | `pricing` | 1.0.0 |
 | Order Status | `orderStatus` | 1.0.0, 2.0.0 |
-| Order Shipment Notification | `shipments` | 1.0.0, 2.0.0 (2.0.0 also gives each package's ship-from and ship-to addresses, weight, dimensions and freight terms) |
+| Order Shipment Notification | `shipments` | 1.0.0, 2.0.0, 2.1.0 (2.x also gives each package's ship-from and ship-to addresses, weight, dimensions and freight terms) |
 | Invoice | `invoices` | 1.0.0 |
 
 A config with a version it can't talk or a URL that isn't `https` is refused at start.
@@ -155,7 +155,7 @@ The handler, the supplier list, the docs and the default-login env vars all come
 
 ## The directory
 
-`src/directory/data.ts` is generated from PromoStandards' own endpoint directory (its Web Service Repository) by `pnpm directory:sync`. The last sync (2026-11-23) found 558 suppliers with 1,490 endpoints OpenPromo can talk, out of 1,040 suppliers listed. SanMar's listing gives exactly the endpoints its driver uses. For each supplier it keeps, per service, the highest version OpenPromo talks, with its test URL when one is listed. It prints everything it leaves out and why (a version OpenPromo doesn't talk, a URL that isn't https, a service listed inactive). The most common versions it can't use yet are Product Data 1.0.0 (479 endpoints) and Inventory 1.2.1 (132): supporting those is how most listed suppliers would gain stock and product data. A GitHub workflow runs it weekly and opens a pull request when anything changed. Hand fixes go in `src/directory/overrides.ts`, never in the generated file. A supplier with its own driver is never served from the directory.
+`src/directory/data.ts` is generated from PromoStandards' own endpoint directory (its Web Service Repository) by `pnpm directory:sync`. The last sync (2026-11-23) found 558 suppliers with 1,502 endpoints OpenPromo can talk, out of 1,040 suppliers listed; 137 of them answer shipments (96 at Order Shipment Notification 1.0.0, 35 at 2.0.0, 6 at 2.1.0). SanMar's listing gives exactly the endpoints its driver uses. For each supplier it keeps, per service, the highest version OpenPromo talks, with its test URL when one is listed. It prints everything it leaves out and why (a version OpenPromo doesn't talk, a URL that isn't https, a service listed inactive). The most common versions it can't use yet are Product Data 1.0.0 (479 endpoints) and Inventory 1.2.1 (132): supporting those is how most listed suppliers would gain stock and product data. A GitHub workflow runs it weekly and opens a pull request when anything changed. Hand fixes go in `src/directory/overrides.ts`, never in the generated file. A supplier with its own driver is never served from the directory.
 
 ## Use it as a library
 
@@ -220,6 +220,7 @@ Every shape comes from the suppliers' published guides, and S&S's catalog calls 
 
 - **SanMar's wording for a disabled service.** The "not enabled" message for SanMar's own services isn't documented. OpenPromo reads anything mentioning "not enabled / not authorized" as `not_enabled`.
 - **S&S's order fields.** Status words, tracking, invoice and line fields on `/v2/orders/{po}?lines=true`, the order post's answer, and the invoiced-between-dates parameters are named as we read S&S's docs.
+- **Order Shipment Notification 2.0.0 and 2.1.0.** The test fixtures are built from the official schemas, not from a supplier's live answer.
 - **S&S style lookups by name.** `/v2/styles/{identifier}` with a part number or "Brand Style" (numeric style ids are proven).
 
 ## Changes
