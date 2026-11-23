@@ -2,34 +2,26 @@
  * The server's setup, read from environment variables once at start.
  *
  * OpenPromo is a pass-through: each request brings the supplier login it
- * should use, in headers (`X-SanMar-…` for SanMar, `X-Supplier-…` for other
- * PromoStandards suppliers), and the server keeps none of it. A login set in
- * env vars is only an optional default, for someone who self-hosts for one
- * account. The only thing the server needs is its own API key.
+ * should use, in the headers its supplier's driver names, and the server
+ * keeps none of it. A login set in env vars is only an optional default, for
+ * someone who self-hosts for one account. Its names follow one rule for every
+ * supplier: `{SUPPLIER}_{FIELD}` (SANMAR_USERNAME, SSACTIVEWEAR_API_KEY,
+ * ALPHABRODER_ID). The only thing the server needs is its own API key.
  */
-import { checkSupplierConfig, PromoStandardsClient, type PromoStandardsLogin, type PromoStandardsSupplier } from "../promostandards/client.js";
-import { SANMAR_PROMOSTANDARDS, SanmarClient, type SanmarEnvironment, type SanmarLogin } from "../sanmar/index.js";
 import { OpenPromoError } from "../errors.js";
+import { envPrefix, loginEnvVar, type SupplierConnection, type SupplierDriver, type SupplierLogin } from "../suppliers/driver.js";
+import type { PromoStandardsListing } from "../suppliers/promostandards.js";
+import { checkDrivers, supplierDrivers } from "../suppliers/registry.js";
 
-/** A supplier the server can talk to; logins come with each request. */
+/** A supplier the server serves: its driver, and the defaults from env vars. */
 export interface SupplierDef {
   id: string;
   name: string;
-  /** SanMar's own services as well as PromoStandards. */
-  sanmar: boolean;
-  promoStandards: PromoStandardsSupplier;
-  /** "production", or the supplier's test environment ("edev" for SanMar, "test" for others): the default, a request may override it. */
+  driver: SupplierDriver;
+  /** The environment used when a request doesn't say. */
   environment: string;
   /** A login from env vars, used when a request sends none. */
-  defaultLogin?: SanmarLogin | PromoStandardsLogin;
-}
-
-/** The clients for one request: built from its headers, or the supplier's default login. */
-export interface SupplierEntry {
-  id: string;
-  name: string;
-  sanmar?: SanmarClient;
-  promoStandards: PromoStandardsClient;
+  defaultLogin?: SupplierLogin;
 }
 
 export interface ServerConfig {
@@ -37,9 +29,9 @@ export interface ServerConfig {
   apiKeys: string[];
   /** Placing orders is off unless the owner turns it on. */
   allowOrders: boolean;
-  /** The default for SanMar accounts set up for Warehouse Selection; a request may say `X-SanMar-Warehouse-Selection: on`. */
-  sanmarWarehouseSelection: boolean;
   suppliers: Map<string, SupplierDef>;
+  /** The environment variables, for drivers' own settings (never logins: those are read here). */
+  env: Record<string, string | undefined>;
   /** For tests: the transport every client uses. */
   fetch?: typeof fetch;
 }
@@ -50,16 +42,16 @@ export class ConfigError extends Error {
 
 type Env = Record<string, string | undefined>;
 
-interface CustomSupplier extends PromoStandardsSupplier {
-  /** Optional default login; requests normally send their own. */
-  login?: PromoStandardsLogin;
+/** A supplier in OPENPROMO_SUPPLIERS: a PromoStandards listing, optionally with a default login and environment. */
+interface CustomSupplier extends PromoStandardsListing {
+  login?: { id: string; password: string };
   environment?: "production" | "test";
 }
 
 const yes = (v: string | null | undefined) => /^(1|true|on|yes)$/i.test(v ?? "");
 
 /** The config from env, or a `ConfigError` saying exactly what's wrong. */
-export function loadConfig(env: Env = process.env, opts: { fetch?: typeof fetch } = {}): ServerConfig {
+export function loadConfig(env: Env = process.env, opts: { fetch?: typeof fetch; drivers?: SupplierDriver[] } = {}): ServerConfig {
   const apiKeys = (env.OPENPROMO_API_KEY ?? "")
     .split(",")
     .map((k) => k.trim())
@@ -67,68 +59,62 @@ export function loadConfig(env: Env = process.env, opts: { fetch?: typeof fetch 
   if (!apiKeys.length) throw new ConfigError("Set OPENPROMO_API_KEY to a long random string (e.g. `openssl rand -hex 32`). Callers send it as `Authorization: Bearer <key>`.");
   if (apiKeys.some((k) => k.length < 24)) throw new ConfigError("OPENPROMO_API_KEY must be at least 24 characters.");
 
-  const suppliers = new Map<string, SupplierDef>();
-  const environment = (env.SANMAR_ENVIRONMENT || "production").toLowerCase();
-  if (environment !== "production" && environment !== "edev") throw new ConfigError('SANMAR_ENVIRONMENT must be "production" or "edev".');
-  const sanmarFields = [env.SANMAR_CUSTOMER_NUMBER, env.SANMAR_USERNAME, env.SANMAR_PASSWORD];
-  if (sanmarFields.some(Boolean) && !sanmarFields.every(Boolean)) throw new ConfigError("A default SanMar login needs all three of SANMAR_CUSTOMER_NUMBER, SANMAR_USERNAME and SANMAR_PASSWORD (or none: callers then send their own in headers).");
-  // SanMar is always available: callers send their login with each request.
-  suppliers.set("sanmar", {
-    id: "sanmar",
-    name: "SanMar",
-    sanmar: true,
-    promoStandards: SANMAR_PROMOSTANDARDS,
-    environment,
-    defaultLogin: sanmarFields.every(Boolean) ? { customerNumber: env.SANMAR_CUSTOMER_NUMBER!, username: env.SANMAR_USERNAME!, password: env.SANMAR_PASSWORD! } : undefined,
-  });
-
+  let custom: CustomSupplier[] = [];
   if (env.OPENPROMO_SUPPLIERS) {
-    let list: CustomSupplier[];
     try {
-      list = JSON.parse(env.OPENPROMO_SUPPLIERS) as CustomSupplier[];
+      custom = JSON.parse(env.OPENPROMO_SUPPLIERS) as CustomSupplier[];
     } catch {
       throw new ConfigError("OPENPROMO_SUPPLIERS must be a JSON array of supplier configs (see README).");
     }
-    if (!Array.isArray(list)) throw new ConfigError("OPENPROMO_SUPPLIERS must be a JSON array.");
-    for (const s of list) {
-      const problems = checkSupplierConfig(s);
-      if (s.login && (!s.login.id || !s.login.password)) problems.push("login needs both id and password (or leave it out)");
-      if (suppliers.has(s.id)) problems.push(`supplier id "${s.id}" is used twice`);
-      if (problems.length) throw new ConfigError(`OPENPROMO_SUPPLIERS: ${s.id ?? "(no id)"}: ${problems.join("; ")}`);
-      const { login, environment: env2 = "production", ...supplier } = s;
-      suppliers.set(s.id, { id: s.id, name: s.name, sanmar: false, promoStandards: supplier, environment: env2, defaultLogin: login });
+    if (!Array.isArray(custom)) throw new ConfigError("OPENPROMO_SUPPLIERS must be a JSON array.");
+    for (const s of custom) if (s.login && (!s.login.id || !s.login.password)) throw new ConfigError(`OPENPROMO_SUPPLIERS: ${s.id}: login needs both id and password (or leave it out)`);
+  }
+  const only = (env.OPENPROMO_ENABLED_SUPPLIERS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+
+  let drivers: SupplierDriver[];
+  try {
+    drivers = opts.drivers ?? supplierDrivers({ extra: custom.map(({ login: _l, environment: _e, ...listing }) => listing), only });
+  } catch (e) {
+    throw new ConfigError(`OPENPROMO_SUPPLIERS: ${(e as Error).message}`);
+  }
+  const problems = checkDrivers(drivers);
+  if (problems.length) throw new ConfigError(problems.join("; "));
+  const unknown = only.filter((id) => !drivers.some((d) => d.id === id));
+  if (unknown.length) throw new ConfigError(`OPENPROMO_ENABLED_SUPPLIERS names suppliers OpenPromo doesn't have: ${unknown.join(", ")}.`);
+
+  const suppliers = new Map<string, SupplierDef>();
+  for (const driver of drivers) {
+    const own = custom.find((c) => c.id === driver.id);
+    const environment = (env[`${envPrefix(driver.id)}_ENVIRONMENT`] || own?.environment || driver.environments[0]!).toLowerCase();
+    if (!driver.environments.includes(environment)) throw new ConfigError(`${envPrefix(driver.id)}_ENVIRONMENT must be ${driver.environments.map((e) => `"${e}"`).join(" or ")}.`);
+    const fields = driver.login.map((f) => [f.key, env[loginEnvVar(driver.id, f.key)]] as const);
+    if (fields.some(([, v]) => v) && !fields.every(([, v]) => v)) {
+      throw new ConfigError(`A default ${driver.name} login needs all of ${driver.login.map((f) => loginEnvVar(driver.id, f.key)).join(", ")} (or none: callers then send their own in headers).`);
     }
+    const defaultLogin = fields.every(([, v]) => v) ? Object.fromEntries(fields) as SupplierLogin : own?.login ? { id: own.login.id, password: own.login.password } : undefined;
+    suppliers.set(driver.id, { id: driver.id, name: driver.name, driver, environment, defaultLogin });
   }
 
-  return { apiKeys, allowOrders: yes(env.OPENPROMO_ORDERS), sanmarWarehouseSelection: yes(env.SANMAR_WAREHOUSE_SELECTION), suppliers, fetch: opts.fetch };
+  return { apiKeys, allowOrders: yes(env.OPENPROMO_ORDERS), suppliers, env, fetch: opts.fetch };
 }
 
-/** Request headers that carry supplier logins: never logged, never stored. */
-export const LOGIN_HEADERS = ["x-sanmar-customer-number", "x-sanmar-username", "x-sanmar-password", "x-supplier-id", "x-supplier-password"] as const;
+/** The header that picks a supplier's environment. */
+export const environmentHeader = (driver: SupplierDriver) => driver.environmentHeader ?? "X-Supplier-Environment";
 
 /**
- * The clients for this request: the login in its headers, else the
- * supplier's default login, else `invalid` saying which headers to send.
- * `X-SanMar-Environment: edev` (or `X-Supplier-Environment: test`) picks the
- * supplier's test environment.
+ * The connection for this request: the login in its headers, else the
+ * supplier's default login, else `invalid` naming the headers to send.
  */
-export function clientsFor(def: SupplierDef, headers: Headers, config: Pick<ServerConfig, "fetch">): SupplierEntry {
+export function connectionFor(def: SupplierDef, headers: Headers, config: Pick<ServerConfig, "fetch">): SupplierConnection {
+  const { driver } = def;
   const h = (name: string) => headers.get(name)?.trim() || undefined;
-  if (def.sanmar) {
-    const given = [h("x-sanmar-customer-number"), h("x-sanmar-username"), h("x-sanmar-password")];
-    if (given.some(Boolean) && !given.every(Boolean)) throw new OpenPromoError("invalid", "Send all three of X-SanMar-Customer-Number, X-SanMar-Username and X-SanMar-Password.", { supplier: def.id });
-    const login = given.every(Boolean) ? { customerNumber: given[0]!, username: given[1]!, password: given[2]! } : (def.defaultLogin as SanmarLogin | undefined);
-    if (!login) throw new OpenPromoError("invalid", "Send your SanMar login with the request: X-SanMar-Customer-Number, X-SanMar-Username and X-SanMar-Password (your sanmar.com web-services user).", { supplier: def.id });
-    const environment = (h("x-sanmar-environment") ?? def.environment).toLowerCase();
-    if (environment !== "production" && environment !== "edev") throw new OpenPromoError("invalid", 'X-SanMar-Environment must be "production" or "edev".', { supplier: def.id });
-    const sanmar = new SanmarClient(login, { environment: environment as SanmarEnvironment, fetch: config.fetch });
-    return { id: def.id, name: def.name, sanmar, promoStandards: sanmar.promoStandards() };
-  }
-  const given = [h("x-supplier-id"), h("x-supplier-password")];
-  if (given.some(Boolean) && !given.every(Boolean)) throw new OpenPromoError("invalid", "Send both X-Supplier-Id and X-Supplier-Password.", { supplier: def.id });
-  const login = given.every(Boolean) ? { id: given[0]!, password: given[1]! } : (def.defaultLogin as PromoStandardsLogin | undefined);
-  if (!login) throw new OpenPromoError("invalid", `Send your ${def.name} PromoStandards login with the request: X-Supplier-Id and X-Supplier-Password.`, { supplier: def.id });
-  const environment = (h("x-supplier-environment") ?? def.environment).toLowerCase();
-  if (environment !== "production" && environment !== "test") throw new OpenPromoError("invalid", 'X-Supplier-Environment must be "production" or "test".', { supplier: def.id });
-  return { id: def.id, name: def.name, promoStandards: new PromoStandardsClient(def.promoStandards, login, { environment, fetch: config.fetch }) };
+  const given = driver.login.map((f) => [f.key, h(f.header)] as const);
+  const names = driver.login.map((f) => f.header);
+  const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0]!;
+  if (given.some(([, v]) => v) && !given.every(([, v]) => v)) throw new OpenPromoError("invalid", `Send all of ${list}.`, { supplier: def.id });
+  const login = given.every(([, v]) => v) ? (Object.fromEntries(given) as SupplierLogin) : def.defaultLogin;
+  if (!login) throw new OpenPromoError("invalid", `Send your ${def.name} login with the request: ${list} (${driver.login.map((f) => f.label).join(", ")}).`, { supplier: def.id });
+  const environment = (h(environmentHeader(driver)) ?? def.environment).toLowerCase();
+  if (!driver.environments.includes(environment)) throw new OpenPromoError("invalid", `${environmentHeader(driver)} must be ${driver.environments.map((e) => `"${e}"`).join(" or ")}.`, { supplier: def.id });
+  return driver.connect(login, { environment, fetch: config.fetch });
 }

@@ -380,6 +380,8 @@ export function parseProduct(res: XmlNode): Product | null {
       return {
         partId: text(part.partId),
         colorName: opt(color?.colorName),
+        colorHex: opt(color?.hex),
+        size: opt(size?.labelSize),
         standardColorName: opt(color?.standardColorName),
         approximatePms: opt(color?.approximatePms),
         labelSize: opt(size?.labelSize),

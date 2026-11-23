@@ -1,15 +1,18 @@
 /**
  * The REST API as one web-standard handler (`Request` → `Response`), so the
  * same code runs on Vercel, Node, Docker, Deno or Bun. JSON in and out,
- * money in cents. It asks a supplier only when a caller asks: no polling,
- * no background jobs.
+ * money in cents. Nothing here names a supplier: every route is the same for
+ * all of them, and what only one supplier does is that driver's route. It
+ * asks a supplier only when a caller asks: no polling, no background jobs.
  */
 import { createHash, timingSafeEqual } from "node:crypto";
 import { OpenPromoError, type OpenPromoErrorKind } from "../errors.js";
 import type { InvoiceQuery, PriceType } from "../promostandards/types.js";
-import type { SanmarOrder } from "../sanmar/order.js";
-import { clientsFor, type ServerConfig, type SupplierEntry } from "./config.js";
+import { CAPABILITIES, type Capability, type DriverRoute, type SupplierConnection } from "../suppliers/driver.js";
+import { connectionFor, environmentHeader, type ServerConfig, type SupplierDef } from "./config.js";
 import { openApiDocument } from "./openapi.js";
+
+export const VERSION = "0.2.0";
 
 const STATUS: Record<OpenPromoErrorKind | "unauthorized" | "unknown_route" | "unknown_supplier" | "not_offered" | "orders_off" | "duplicate", number> = {
   invalid: 400,
@@ -21,7 +24,7 @@ const STATUS: Record<OpenPromoErrorKind | "unauthorized" | "unknown_route" | "un
   unknown_supplier: 404,
   not_offered: 404,
   duplicate: 409,
-  // The supplier turned down this server's login or request: a failed dependency, not the caller's fault.
+  // The supplier turned down the login or request: a failed dependency, not the caller's fault.
   auth: 424,
   not_enabled: 424,
   refused: 424,
@@ -32,26 +35,15 @@ const STATUS: Record<OpenPromoErrorKind | "unauthorized" | "unknown_route" | "un
 
 type ErrorKind = keyof typeof STATUS;
 
-const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
-  new Response(JSON.stringify(body, null, 2), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...headers } });
-
+const json = (status: number, body: unknown) => new Response(JSON.stringify(body, null, 2), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
 const fail = (kind: ErrorKind, message: string, extra: Record<string, unknown> = {}) => json(STATUS[kind], { error: { kind, message, ...extra } });
 
 const digest = (s: string) => createHash("sha256").update(s).digest();
 function authorized(req: Request, keys: readonly string[]): boolean {
-  const header = req.headers.get("authorization") ?? "";
-  const m = /^Bearer\s+(.+)$/i.exec(header.trim());
+  const m = /^Bearer\s+(.+)$/i.exec((req.headers.get("authorization") ?? "").trim());
   if (!m) return false;
   const given = digest(m[1]!.trim());
   return keys.some((k) => timingSafeEqual(given, digest(k)));
-}
-
-async function body<T>(req: Request): Promise<T> {
-  try {
-    return (await req.json()) as T;
-  } catch {
-    throw new OpenPromoError("invalid", "The request body must be JSON.");
-  }
 }
 
 function invoiceQuery(params: URLSearchParams): InvoiceQuery {
@@ -71,6 +63,42 @@ function invoiceQuery(params: URLSearchParams): InvoiceQuery {
 
 const PRICE_TYPES = new Set(["Net", "List", "Customer"]);
 
+/** A driver route's `:name` segments against the path, or null when it doesn't match. */
+function matchRoute(pattern: string, rest: readonly string[]): Record<string, string> | null {
+  const want = pattern.split("/").filter(Boolean);
+  if (want.length !== rest.length) return null;
+  const params: Record<string, string> = {};
+  for (const [i, seg] of want.entries()) {
+    if (seg.startsWith(":")) params[seg.slice(1)] = rest[i]!;
+    else if (seg !== rest[i]) return null;
+  }
+  return params;
+}
+
+/** What the supplier list says about one supplier: never a login, only which headers carry one. */
+export function describeSupplier(def: SupplierDef, config: Pick<ServerConfig, "allowOrders">, detail = false) {
+  const { driver } = def;
+  return {
+    id: def.id,
+    name: def.name,
+    kind: driver.kind,
+    capabilities: driver.capabilities,
+    loginHeaders: driver.login.map((f) => f.header),
+    defaultLogin: !!def.defaultLogin,
+    environment: def.environment,
+    ...(detail
+      ? {
+          login: driver.login.map((f) => ({ header: f.header, label: f.label })),
+          environments: driver.environments,
+          environmentHeader: environmentHeader(driver),
+          routes: (driver.routes ?? []).map((r) => ({ method: r.method, path: `/v1/${def.id}/${r.path}`, summary: r.summary, ...(r.write ? { write: true, allowed: config.allowOrders } : {}) })),
+          ...(driver.website ? { website: driver.website } : {}),
+          ...(driver.notes ? { notes: driver.notes } : {}),
+        }
+      : {}),
+  };
+}
+
 export interface HandlerOptions {
   /** Called once per request with what happened (never bodies, logins or keys). */
   log?: (line: { method: string; path: string; status: number; ms: number }) => void;
@@ -79,103 +107,114 @@ export interface HandlerOptions {
 /** The whole API. */
 export function createHandler(config: ServerConfig, opts: HandlerOptions = {}): (req: Request) => Promise<Response> {
   const log = opts.log ?? ((l) => console.info(`${l.method} ${l.path} ${l.status} ${l.ms}ms`));
+  const counts = { suppliers: config.suppliers.size };
 
   async function route(req: Request, url: URL): Promise<Response> {
     const parts = url.pathname.replace(/\/+$/, "").split("/").filter(Boolean).map(decodeURIComponent);
     const method = req.method.toUpperCase();
 
-    if (method === "GET" && (parts.length === 0 || (parts.length === 1 && parts[0] === "health"))) return json(200, { ok: true, name: "OpenPromo", suppliers: [...config.suppliers.keys()] });
-    if (method === "GET" && parts.length === 1 && parts[0] === "openapi.json") return json(200, openApiDocument(url.origin));
+    if (method === "GET" && (parts.length === 0 || (parts.length === 1 && parts[0] === "health"))) return json(200, { ok: true, name: "OpenPromo", version: VERSION, ...counts });
+    if (method === "GET" && parts.length === 1 && parts[0] === "openapi.json") return json(200, openApiDocument(url.origin, config));
     if (parts[0] !== "v1") return fail("unknown_route", `No route ${method} ${url.pathname}. See /openapi.json.`);
     if (!authorized(req, config.apiKeys)) return fail("unauthorized", "Send your OpenPromo API key as `Authorization: Bearer <key>`.");
 
-    if (method === "GET" && parts.length === 2 && parts[1] === "suppliers") {
-      return json(200, {
-        suppliers: [...config.suppliers.values()].map((s) => ({
-          id: s.id,
-          name: s.name,
-          environment: s.environment,
-          services: Object.keys(s.promoStandards.endpoints),
-          sanmarServices: s.sanmar,
-          orders: s.sanmar && config.allowOrders,
-          // Which headers carry a login for this supplier; whether the server has a default one (never the login itself).
-          loginHeaders: s.sanmar ? ["X-SanMar-Customer-Number", "X-SanMar-Username", "X-SanMar-Password"] : ["X-Supplier-Id", "X-Supplier-Password"],
-          defaultLogin: !!s.defaultLogin,
-        })),
-      });
+    // GET /v1/suppliers[?search=&capability=&kind=], GET /v1/suppliers/:id
+    if (method === "GET" && parts[1] === "suppliers") {
+      if (parts.length === 3) {
+        const def = config.suppliers.get(parts[2]!);
+        return def ? json(200, describeSupplier(def, config, true)) : fail("unknown_supplier", `No supplier "${parts[2]}" on this server. See GET /v1/suppliers.`);
+      }
+      if (parts.length === 2) {
+        const words = (url.searchParams.get("search") ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+        const capability = url.searchParams.get("capability");
+        const kind = url.searchParams.get("kind");
+        if (capability && !(CAPABILITIES as readonly string[]).includes(capability)) throw new OpenPromoError("invalid", `capability must be one of ${CAPABILITIES.join(", ")}.`);
+        const list = [...config.suppliers.values()].filter(
+          (s) => (!words.length || words.every((w) => `${s.id} ${s.name}`.toLowerCase().includes(w))) && (!capability || s.driver.capabilities.includes(capability as Capability)) && (!kind || s.driver.kind === kind),
+        );
+        return json(200, { count: list.length, suppliers: list.map((s) => describeSupplier(s, config)) });
+      }
     }
 
-    const supplierId = parts[1];
-    const def = supplierId ? config.suppliers.get(supplierId) : undefined;
-    if (!def) return fail("unknown_supplier", `No supplier "${supplierId ?? ""}" on this server. Configured: ${[...config.suppliers.keys()].join(", ")}.`);
-    // The login comes with the request (or the server's default): nothing is kept after it answers.
-    const s: SupplierEntry = clientsFor(def, req.headers, config);
+    const def = parts[1] ? config.suppliers.get(parts[1]) : undefined;
+    if (!def) return fail("unknown_supplier", `No supplier "${parts[1] ?? ""}" on this server. See GET /v1/suppliers.`);
     const rest = parts.slice(2);
-    const ps = s.promoStandards;
-    const needs = (service: Parameters<typeof ps.has>[0]) => {
-      if (!ps.has(service)) throw Object.assign(new OpenPromoError("not_enabled", `${s.name} has no ${service} service on this server.`), { notOffered: true });
-    };
 
-    // GET /v1/:supplier/products/:id[/inventory|/pricing]
-    if (method === "GET" && rest[0] === "products" && rest[1]) {
+    // What only this supplier does.
+    for (const r of (def.driver.routes ?? []) as readonly DriverRoute[]) {
+      if (r.method !== method) continue;
+      const params = matchRoute(r.path, rest);
+      if (!params) continue;
+      if (r.write && !config.allowOrders) return fail("orders_off", "Placing orders is switched off on this server. Set OPENPROMO_ORDERS=on to allow it.");
+      const connection = connectionFor(def, req.headers, config);
+      const answer = await r.handle({
+        connection,
+        request: req,
+        url,
+        params,
+        env: config.env,
+        body: async <T>() => {
+          try {
+            return (await req.json()) as T;
+          } catch {
+            throw new OpenPromoError("invalid", "The request body must be JSON.");
+          }
+        },
+      });
+      return json(answer.status, answer.body);
+    }
+
+    // The shared questions, the same for every supplier.
+    const ask = <K extends Capability>(capability: K): NonNullable<SupplierConnection[K]> => {
+      const connection = connectionFor(def, req.headers, config);
+      const fn = connection[capability];
+      if (!fn) throw Object.assign(new OpenPromoError("not_enabled", `${def.name} doesn't offer ${capability} through OpenPromo.`, { supplier: def.id }), { notOffered: true });
+      return fn.bind(connection) as NonNullable<SupplierConnection[K]>;
+    };
+    const offers = (capability: Capability) => def.driver.capabilities.includes(capability);
+    const notOffered = (capability: Capability) => fail("not_offered", `${def.name} doesn't offer ${capability} through OpenPromo. See GET /v1/suppliers/${def.id}.`, { supplier: def.id });
+
+    if (method === "GET" && rest[0] === "products" && rest[1] && rest.length <= 3) {
       const id = rest[1];
       if (rest.length === 2) {
-        const product = s.sanmar ? await s.sanmar.productInfo(id) : (needs("productData"), await ps.getProduct(id));
-        return product ? json(200, product) : fail("not_found", `${s.name} has no product ${id}.`);
+        if (!offers("product")) return notOffered("product");
+        const product = await ask("product")(id);
+        return product ? json(200, product) : fail("not_found", `${def.name} has no product ${id}.`, { supplier: def.id });
       }
-      if (rest.length === 3 && rest[2] === "inventory") {
-        needs("inventory");
-        const partIds = url.searchParams.getAll("partId");
-        const inv = await ps.getInventory(id, partIds.length ? { partIds } : {});
-        return inv ? json(200, inv) : fail("not_found", `${s.name} has no product ${id}.`);
+      if (rest[2] === "inventory") {
+        if (!offers("inventory")) return notOffered("inventory");
+        const inv = await ask("inventory")(id, { partIds: url.searchParams.getAll("partId") });
+        return inv ? json(200, inv) : fail("not_found", `${def.name} has no product ${id}.`, { supplier: def.id });
       }
-      if (rest.length === 3 && rest[2] === "pricing") {
-        const priceType = url.searchParams.get("priceType");
-        if (s.sanmar && !priceType) return json(200, { style: id.toUpperCase(), prices: await s.sanmar.pricing(id) });
-        if (priceType && !PRICE_TYPES.has(priceType)) throw new OpenPromoError("invalid", "priceType must be Net, List or Customer.");
-        needs("pricing");
-        const pricing = await ps.getPricing(id, { priceType: (priceType as PriceType | null) ?? "Net", partId: url.searchParams.get("partId") ?? undefined, fobId: url.searchParams.get("fobId") ?? undefined });
-        return pricing ? json(200, pricing) : fail("not_found", `${s.name} has no product ${id}.`);
+      if (rest[2] === "pricing") {
+        if (!offers("pricing")) return notOffered("pricing");
+        const priceType = url.searchParams.get("priceType") ?? "Net";
+        if (!PRICE_TYPES.has(priceType)) throw new OpenPromoError("invalid", "priceType must be Net, List or Customer.");
+        const pricing = await ask("pricing")(id, { priceType: priceType as PriceType, partId: url.searchParams.get("partId") ?? undefined, fobId: url.searchParams.get("fobId") ?? undefined });
+        return pricing ? json(200, pricing) : fail("not_found", `${def.name} has no product ${id}.`, { supplier: def.id });
       }
     }
 
-    // GET /v1/:supplier/orders/:po[/shipments]
     if (method === "GET" && rest[0] === "orders" && rest[1] && rest.length <= 3) {
       const po = rest[1];
       if (rest.length === 2) {
-        needs("orderStatus");
-        const found = (await ps.getOrderStatus({ poNumber: po })).filter((o) => o.purchaseOrderNumber.trim().toLowerCase() === po.trim().toLowerCase());
+        if (!offers("orderStatus")) return notOffered("orderStatus");
+        const found = (await ask("orderStatus")({ poNumber: po })).filter((o) => o.purchaseOrderNumber.trim().toLowerCase() === po.trim().toLowerCase());
         const orders = found.flatMap((o) => o.orders);
-        return orders.length ? json(200, { purchaseOrderNumber: po, orders }) : fail("not_found", `${s.name} has no order under PO ${po}.`);
+        return orders.length ? json(200, { purchaseOrderNumber: po, orders }) : fail("not_found", `${def.name} has no order under PO ${po}.`, { supplier: def.id });
       }
       if (rest[2] === "shipments") {
-        needs("shipments");
-        return json(200, { purchaseOrderNumber: po, shipments: await ps.getShipments({ poNumber: po }) });
+        if (!offers("shipments")) return notOffered("shipments");
+        return json(200, { purchaseOrderNumber: po, shipments: await ask("shipments")({ poNumber: po }) });
       }
     }
 
-    // GET /v1/:supplier/invoices?po=|invoice=|date=|since=
     if (method === "GET" && rest[0] === "invoices" && rest.length === 1) {
-      needs("invoices");
-      return json(200, { invoices: await ps.getInvoices(invoiceQuery(url.searchParams)) });
+      if (!offers("invoices")) return notOffered("invoices");
+      return json(200, { invoices: await ask("invoices")(invoiceQuery(url.searchParams)) });
     }
 
-    // POST /v1/sanmar/orders/preview, POST /v1/sanmar/orders
-    if (method === "POST" && rest[0] === "orders" && s.sanmar) {
-      const ws = req.headers.get("x-sanmar-warehouse-selection");
-      const options = { warehouseSelection: ws === null ? config.sanmarWarehouseSelection : /^(1|true|on|yes)$/i.test(ws) };
-      if (rest.length === 2 && rest[1] === "preview") return json(200, await s.sanmar.preSubmitOrder(await body<SanmarOrder>(req), options));
-      if (rest.length === 1) {
-        if (!config.allowOrders) return fail("orders_off", "Placing orders is switched off on this server. Set OPENPROMO_ORDERS=on to allow it.");
-        const order = await body<SanmarOrder>(req);
-        // Never order twice: if SanMar already has a live order under this PO number, say so instead.
-        const existing = (await ps.getOrderStatus({ poNumber: String(order.poNumber ?? "") })).flatMap((o) => o.orders).filter((o) => o.state !== "cancelled");
-        if (existing.length) return fail("duplicate", `SanMar already has an order under PO ${order.poNumber}. Nothing was sent.`, { orders: existing });
-        return json(201, await s.sanmar.submitOrder(order, options));
-      }
-    }
-
-    return fail("unknown_route", `No route ${method} ${url.pathname}. See /openapi.json.`);
+    return fail("unknown_route", `No route ${method} ${url.pathname}. See GET /v1/suppliers/${def.id} and /openapi.json.`);
   }
 
   return async (req: Request) => {

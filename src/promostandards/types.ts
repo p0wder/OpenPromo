@@ -11,6 +11,8 @@ export type PromoStandardsService = (typeof PROMOSTANDARDS_SERVICES)[number];
 
 export interface Product {
   productId: string;
+  /** The style number people use ("PC54", "5000"), when the supplier's product id is something else. */
+  styleNumber?: string;
   name: string;
   brand?: string;
   description: string[];
@@ -26,12 +28,18 @@ export interface Product {
 export interface ProductPart {
   partId: string;
   colorName?: string;
+  /** The color as a hex code ("#1A2B3C"), when the supplier gives one. */
+  colorHex?: string;
+  /** The size as the supplier names it ("XL"); PromoStandards' `labelSize`, or the supplier's own size name. */
+  size?: string;
   standardColorName?: string;
   approximatePms?: string;
   labelSize?: string;
   apparelStyle?: string;
   gtin?: string;
   isCloseout?: boolean;
+  /** Pictures of this color, by view ("front", "back", "side", "swatch"). */
+  images?: Record<string, string>;
 }
 
 /* ---------------------------------------------------------------- Inventory */
