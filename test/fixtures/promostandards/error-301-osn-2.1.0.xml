@@ -1,0 +1,5 @@
+<!-- source: OSN 2.1.0 schema (ServiceMessageArray in GetOrderShipmentNotificationResponse.xsd and SharedOSNObjects.xsd: the array itself in SharedObjects), not a live answer; code 301 from the PromoStandards error codes table, SanMar guide v24.7 p12 -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:GetOrderShipmentNotificationResponse xmlns:ns2="http://www.promostandards.org/WSDL/OrderShipmentNotificationService/2.1.0/" xmlns:ns3="http://www.promostandards.org/WSDL/OrderShipmentNotificationService/2.1.0/SharedObjects/">
+ <ns3:ServiceMessageArray><ns3:ServiceMessage><ns3:code>301</ns3:code><ns3:description>Reference Number not found</ns3:description><ns3:severity>Error</ns3:severity></ns3:ServiceMessage></ns3:ServiceMessageArray>
+</ns2:GetOrderShipmentNotificationResponse></S:Body></S:Envelope>

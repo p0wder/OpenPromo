@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkSupplierConfig, OpenPromoError, PromoStandardsClient, SANMAR_PROMOSTANDARDS, orderStateOf, parseOrderStatusV1 } from "../src/index.js";
+import { checkSupplierConfig, OpenPromoError, SUPPORTED_VERSIONS, PromoStandardsClient, SANMAR_PROMOSTANDARDS, orderStateOf, parseOrderStatusV1 } from "../src/index.js";
 import { readSoapBody } from "../src/soap.js";
 import { elementsOf, fakeSoap, fixture } from "./helpers.js";
 
@@ -113,7 +113,7 @@ describe("Order Shipment Notification 2.0.0", () => {
 
   it("is a supported config", () => {
     expect(checkSupplierConfig(ACME)).toEqual([]);
-    expect(checkSupplierConfig({ ...ACME, endpoints: { shipments: { version: "2.1.0", url: "https://x.example" } } })).toEqual(["shipments 2.1.0 isn't supported (supported: 1.0.0, 2.0.0)"]);
+    expect(checkSupplierConfig({ ...ACME, endpoints: { shipments: { version: "2.2.0", url: "https://x.example" } } })).toEqual(["shipments 2.2.0 isn't supported (supported: 1.0.0, 2.0.0, 2.1.0)"]);
   });
 
   it("asks by PO with the 2.0.0 namespace, every field a shared object as the schema has it", async () => {
@@ -200,6 +200,97 @@ describe("Order Shipment Notification 2.0.0", () => {
   it("an empty answer is no shipments", async () => {
     const empty = `<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body><ns2:GetOrderShipmentNotificationResponse xmlns:ns2="http://www.promostandards.org/WSDL/OrderShipmentNotificationService/2.0.0/"></ns2:GetOrderShipmentNotificationResponse></S:Body></S:Envelope>`;
     expect(await acme(empty).ps.getShipments({ since: "2026-11-20T00:00:00" })).toEqual([]);
+  });
+});
+
+describe("Order Shipment Notification 2.1.0", () => {
+  const ACME = { id: "acme", name: "Acme Promo", endpoints: { shipments: { version: "2.1.0", url: "https://ps.acme.example/osn21" } } };
+  const acme = (answer: string) => {
+    const fake = fakeSoap({ GetOrderShipmentNotificationRequest: answer });
+    return { ps: new PromoStandardsClient(ACME, login, { fetch: fake.fetch }), calls: fake.calls };
+  };
+
+  it("is a supported config, after 1.0.0 and 2.0.0", () => {
+    expect(SUPPORTED_VERSIONS.shipments).toEqual(["1.0.0", "2.0.0", "2.1.0"]);
+    expect(checkSupplierConfig(ACME)).toEqual([]);
+  });
+
+  it("asks by PO, sales order and since a time with the 2.1.0 namespace, every field a shared object", async () => {
+    const { ps, calls } = acme(fixture("promostandards/shipments-2.1.0.xml"));
+    await ps.getShipments({ poNumber: "PO2101" });
+    await ps.getShipments({ salesOrderNumber: "SO-211" });
+    await ps.getShipments({ since: "2026-11-22T00:00:00" });
+    const call = calls[0]!;
+    expect(call.url).toBe("https://ps.acme.example/osn21");
+    expect(call.soapAction).toBe("getOrderShipmentNotification");
+    expect(call.xml).toContain('xmlns:ns="http://www.promostandards.org/WSDL/OrderShipmentNotificationService/2.1.0/"');
+    expect(call.xml).toContain('xmlns:shar="http://www.promostandards.org/WSDL/OrderShipmentNotificationService/2.1.0/SharedObjects/"');
+    expect(call.xml).toContain("<ns:GetOrderShipmentNotificationRequest>");
+    expect(call.xml).toContain("<shar:wsVersion>2.1.0</shar:wsVersion><shar:id>webuser</shar:id><shar:password>s3cret&amp;&lt;</shar:password><shar:queryType>1</shar:queryType><shar:referenceNumber>PO2101</shar:referenceNumber>");
+    expect(call.xml).not.toContain("<ns:queryType>");
+    expect(calls.map((c) => elementsOf(c.xml, "queryType")[0])).toEqual(["1", "2", "3"]);
+    expect(calls[1]!.xml).toContain("<shar:referenceNumber>SO-211</shar:referenceNumber>");
+    expect(calls[2]!.xml).toContain("<shar:shipmentDateTimestamp>2026-11-22T00:00:00</shar:shipmentDateTimestamp>");
+    expect(calls[2]!.xml).not.toContain("referenceNumber");
+  });
+
+  it("reads the answer, its elements all in SharedObjects, in the shared shape", async () => {
+    const shipments = await acme(fixture("promostandards/shipments-2.1.0.xml")).ps.getShipments({ poNumber: "PO2101" });
+    const dc = { address1: "100 Warehouse Way", city: "Irving", region: "TX", postalCode: "75038" };
+    const shop = { address1: "12 Main St", city: "Jacksonville", region: "FL", postalCode: "32218" };
+    expect(shipments).toEqual([
+      {
+        purchaseOrderNumber: "PO2101",
+        salesOrderNumber: "SO-210",
+        complete: true,
+        packages: [
+          {
+            trackingNumber: "9400111899223100012345",
+            carrier: "USPS",
+            method: "Priority Mail",
+            shippedOn: "2026-11-22",
+            items: [{ productId: "PC54", partId: "538612", quantity: 48, uom: "EA", lineNumber: "1" }],
+            shipFrom: { ...dc, companyName: "Acme Promo DC", country: "US" },
+            shipTo: { ...shop, attentionTo: "Receiving", companyName: "Ink Shop", country: "US", email: "receiving@inkshop.example" },
+            destinationType: "Residential",
+            customerPickup: false,
+            weight: { value: 3.25, uom: "kg" },
+            dimensions: { uom: "cm", length: 40, width: 30 },
+            shipmentTerms: "Collect",
+          },
+        ],
+      },
+      {
+        purchaseOrderNumber: "PO2101",
+        salesOrderNumber: "SO-211",
+        complete: false,
+        packages: [
+          {
+            trackingNumber: "1Z999AA10123456790",
+            carrier: "UPS",
+            method: "2nd Day Air",
+            shippedOn: "2026-11-22",
+            items: [
+              { productId: "K420", partId: "92032", quantity: 1, uom: "BX" },
+              { productId: "ST860", partId: undefined, quantity: 2.5, uom: "DZ", lineNumber: "4" },
+            ],
+            shipFrom: dc,
+            shipTo: shop,
+            customerPickup: false,
+            shippingAccount: "ACCT-77",
+          },
+        ],
+      },
+    ]);
+    // 2.1.0's `shipReferences` has no place in the shared shape: not read.
+    expect(JSON.stringify(shipments)).not.toContain("DEPT 12");
+    expect(Object.keys(shipments[0]!.packages[0]!.dimensions!)).not.toContain("height");
+  });
+
+  it("nothing shipped yet (301) is no shipments; a refused login throws auth", async () => {
+    expect(await acme(fixture("promostandards/error-301-osn-2.1.0.xml")).ps.getShipments({ poNumber: "X" })).toEqual([]);
+    const refused = fixture("promostandards/error-105.xml").replaceAll("GetOrderStatusResponse", "GetOrderShipmentNotificationResponse");
+    await expect(acme(refused).ps.getShipments({ poNumber: "X" })).rejects.toMatchObject({ kind: "auth", code: "105", supplier: "acme" });
   });
 });
 
