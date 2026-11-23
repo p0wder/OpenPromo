@@ -7,17 +7,19 @@ import { createServer } from "node:http";
 import { Readable } from "node:stream";
 import { ConfigError, createHandler, loadConfig } from "./index.js";
 
-let config;
+let config: ReturnType<typeof loadConfig> | undefined;
+let configError: string | undefined;
 try {
   config = loadConfig();
 } catch (e) {
-  if (e instanceof ConfigError) {
-    console.error(`OpenPromo can't start: ${e.message}`);
-    process.exit(1);
-  }
-  throw e;
+  if (!(e instanceof ConfigError)) throw e;
+  configError = e.message;
+  console.error(`OpenPromo isn't set up yet: ${e.message}`);
 }
-const handler = createHandler(config);
+// Not set up yet (a host such as Vercel or Docker restarts a process that exits): stay up and say what's missing, never any secret.
+const handler = config
+  ? createHandler(config)
+  : async () => Response.json({ ok: false, error: { kind: "not_configured", message: `OpenPromo isn't set up yet: ${configError}` } }, { status: 503, headers: { "Cache-Control": "no-store" } });
 const port = Number(process.env.PORT || 8787);
 const host = process.env.HOST || "0.0.0.0";
 const MAX_BODY = 1_000_000;
@@ -47,4 +49,4 @@ createServer(async (req, res) => {
     if (!res.headersSent) res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: { kind: "internal", message: "Something went wrong in OpenPromo." } }));
   }
-}).listen(port, host, () => console.info(`OpenPromo listening on http://${host}:${port} (suppliers: ${[...config.suppliers.keys()].join(", ")}; orders ${config.allowOrders ? "on" : "off"})`));
+}).listen(port, host, () => console.info(config ? `OpenPromo listening on http://${host}:${port} (suppliers: ${[...config.suppliers.keys()].join(", ")}; orders ${config.allowOrders ? "on" : "off"})` : `OpenPromo listening on http://${host}:${port}, not set up yet (every request answers 503)`));

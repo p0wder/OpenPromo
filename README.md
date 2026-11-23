@@ -44,7 +44,7 @@ The full API is described at `GET /openapi.json` (OpenAPI 3.1). Money is in cent
 
 You need a long random API key (`openssl rand -hex 32`) and your supplier logins. Copy `.env.example` to `.env` and fill it in.
 
-**Vercel.** Fork this repo and import it as a new Vercel project. Set the environment variables from `.env.example` and deploy. SanMar has had no IP restriction since July 2018, so no static IP is needed. Calls go out on port 8080 with TLS 1.2.
+**Vercel.** Fork this repo and import it as a new Vercel project. Vercel builds it from the `Dockerfile` as a container. Set the environment variables from `.env.example` and deploy. Until they're set, every request answers 503 saying which one is missing. SanMar has had no IP restriction since July 2018, so no static IP is needed. Calls go out on port 8080 with TLS 1.2.
 
 **Docker:**
 
