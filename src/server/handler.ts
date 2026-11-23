@@ -8,7 +8,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { OpenPromoError, type OpenPromoErrorKind } from "../errors.js";
 import type { InvoiceQuery, PriceType } from "../promostandards/types.js";
 import type { SanmarOrder } from "../sanmar/order.js";
-import type { ServerConfig, SupplierEntry } from "./config.js";
+import { clientsFor, type ServerConfig, type SupplierEntry } from "./config.js";
 import { openApiDocument } from "./openapi.js";
 
 const STATUS: Record<OpenPromoErrorKind | "unauthorized" | "unknown_route" | "unknown_supplier" | "not_offered" | "orders_off" | "duplicate", number> = {
@@ -90,12 +90,26 @@ export function createHandler(config: ServerConfig, opts: HandlerOptions = {}): 
     if (!authorized(req, config.apiKeys)) return fail("unauthorized", "Send your OpenPromo API key as `Authorization: Bearer <key>`.");
 
     if (method === "GET" && parts.length === 2 && parts[1] === "suppliers") {
-      return json(200, { suppliers: [...config.suppliers.values()].map((s) => ({ id: s.id, name: s.name, environment: s.environment, services: s.services, sanmarServices: !!s.sanmar, orders: !!s.sanmar && config.allowOrders })) });
+      return json(200, {
+        suppliers: [...config.suppliers.values()].map((s) => ({
+          id: s.id,
+          name: s.name,
+          environment: s.environment,
+          services: Object.keys(s.promoStandards.endpoints),
+          sanmarServices: s.sanmar,
+          orders: s.sanmar && config.allowOrders,
+          // Which headers carry a login for this supplier; whether the server has a default one (never the login itself).
+          loginHeaders: s.sanmar ? ["X-SanMar-Customer-Number", "X-SanMar-Username", "X-SanMar-Password"] : ["X-Supplier-Id", "X-Supplier-Password"],
+          defaultLogin: !!s.defaultLogin,
+        })),
+      });
     }
 
     const supplierId = parts[1];
-    const s: SupplierEntry | undefined = supplierId ? config.suppliers.get(supplierId) : undefined;
-    if (!s) return fail("unknown_supplier", `No supplier "${supplierId ?? ""}" on this server. Configured: ${[...config.suppliers.keys()].join(", ")}.`);
+    const def = supplierId ? config.suppliers.get(supplierId) : undefined;
+    if (!def) return fail("unknown_supplier", `No supplier "${supplierId ?? ""}" on this server. Configured: ${[...config.suppliers.keys()].join(", ")}.`);
+    // The login comes with the request (or the server's default): nothing is kept after it answers.
+    const s: SupplierEntry = clientsFor(def, req.headers, config);
     const rest = parts.slice(2);
     const ps = s.promoStandards;
     const needs = (service: Parameters<typeof ps.has>[0]) => {
@@ -148,7 +162,8 @@ export function createHandler(config: ServerConfig, opts: HandlerOptions = {}): 
 
     // POST /v1/sanmar/orders/preview, POST /v1/sanmar/orders
     if (method === "POST" && rest[0] === "orders" && s.sanmar) {
-      const options = { warehouseSelection: config.sanmarWarehouseSelection };
+      const ws = req.headers.get("x-sanmar-warehouse-selection");
+      const options = { warehouseSelection: ws === null ? config.sanmarWarehouseSelection : /^(1|true|on|yes)$/i.test(ws) };
       if (rest.length === 2 && rest[1] === "preview") return json(200, await s.sanmar.preSubmitOrder(await body<SanmarOrder>(req), options));
       if (rest.length === 1) {
         if (!config.allowOrders) return fail("orders_off", "Placing orders is switched off on this server. Set OPENPROMO_ORDERS=on to allow it.");

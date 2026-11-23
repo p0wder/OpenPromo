@@ -22,18 +22,20 @@ const order = { poNumber: "1042-1", shipTo: { company: "Acme", address1: "12 Mai
 const post = (body: unknown) => ({ method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
 
 describe("config", () => {
-  it("refuses to start without a long API key or a supplier, and wants SanMar's three values together", () => {
+  it("needs only a long API key; a default SanMar login is optional but all three values together", () => {
     expect(() => loadConfig({})).toThrow(ConfigError);
     expect(() => loadConfig({ OPENPROMO_API_KEY: "short" })).toThrow(/at least 24/);
-    expect(() => loadConfig({ OPENPROMO_API_KEY: KEY })).toThrow(/No supplier/);
+    const bare = loadConfig({ OPENPROMO_API_KEY: KEY });
+    expect([...bare.suppliers.keys()]).toEqual(["sanmar"]);
+    expect(bare.suppliers.get("sanmar")!.defaultLogin).toBeUndefined();
     expect(() => loadConfig({ OPENPROMO_API_KEY: KEY, SANMAR_USERNAME: "x" })).toThrow(/all three/);
     expect(() => loadConfig({ ...ENV, SANMAR_ENVIRONMENT: "test" })).toThrow(/production" or "edev/);
   });
 
   it("adds any PromoStandards supplier from OPENPROMO_SUPPLIERS, checked", () => {
-    const acme = { id: "acme", name: "Acme Promo", endpoints: { inventory: { version: "2.0.0", url: "https://ps.acme.example/inventory" } }, login: { id: "me", password: "pw" } };
+    const acme = { id: "acme", name: "Acme Promo", endpoints: { inventory: { version: "2.0.0", url: "https://ps.acme.example/inventory" } } };
     const config = loadConfig({ OPENPROMO_API_KEY: KEY, OPENPROMO_SUPPLIERS: JSON.stringify([acme]) });
-    expect([...config.suppliers.keys()]).toEqual(["acme"]);
+    expect([...config.suppliers.keys()]).toEqual(["sanmar", "acme"]);
     expect(() => loadConfig({ OPENPROMO_API_KEY: KEY, OPENPROMO_SUPPLIERS: JSON.stringify([{ ...acme, endpoints: { inventory: { version: "9.9.9", url: "http://x" } } }]) })).toThrow(/inventory 9.9.9 isn't supported/);
   });
 });
@@ -105,5 +107,43 @@ describe("the API", () => {
     const { call, lines } = server({});
     await call("/v1/suppliers");
     expect(lines).toEqual([{ method: "GET", path: "/v1/suppliers", status: 200, ms: expect.any(Number) }]);
+  });
+
+  it("is a pass-through: each request brings its own login in headers, nothing is kept or logged", async () => {
+    const fake = fakeSoap({ GetInventoryLevelsRequest: fixture("promostandards/inventory-2.0.0.xml"), getProductInfoByStyleColorSize: fixture("sanmar/product-info.xml") });
+    const lines: unknown[] = [];
+    const handler = createHandler(loadConfig({ OPENPROMO_API_KEY: KEY }, { fetch: fake.fetch }), { log: (l) => lines.push(l) });
+    const ask = async (path: string, headers: Record<string, string> = {}) => {
+      const res = await handler(new Request(`https://openpromo.test${path}`, { headers: { Authorization: `Bearer ${KEY}`, ...headers } }));
+      return { status: res.status, body: (await res.json()) as Record<string, any> };
+    };
+    const shopA = { "X-SanMar-Customer-Number": "111", "X-SanMar-Username": "shop-a", "X-SanMar-Password": "pw-a" };
+    const shopB = { "X-SanMar-Customer-Number": "222", "X-SanMar-Username": "shop-b", "X-SanMar-Password": "pw-b" };
+
+    // No login on the request and none on the server: say which headers to send.
+    expect(await ask("/v1/sanmar/products/PC54/inventory")).toMatchObject({ status: 400, body: { error: { kind: "invalid", message: expect.stringMatching(/X-SanMar-Customer-Number, X-SanMar-Username and X-SanMar-Password/) } } });
+    expect(await ask("/v1/sanmar/products/PC54/inventory", { "X-SanMar-Username": "only-this" })).toMatchObject({ status: 400 });
+    expect(fake.calls).toHaveLength(0);
+
+    // Two accounts, one after the other, each on its own login.
+    expect(await ask("/v1/sanmar/products/K420/inventory", shopA)).toMatchObject({ status: 200, body: { parts: [{ partId: "92032" }] } });
+    expect(await ask("/v1/sanmar/products/PC61", shopB)).toMatchObject({ status: 200, body: { style: "PC61" } });
+    expect(fake.calls[0]!.xml).toContain("<shar:id>shop-a</shar:id><shar:password>pw-a</shar:password>");
+    expect(fake.calls[1]!.xml).toContain("<sanMarCustomerNumber>222</sanMarCustomerNumber><sanMarUserName>shop-b</sanMarUserName><sanMarUserPassword>pw-b</sanMarUserPassword>");
+    // EDEV per request.
+    await ask("/v1/sanmar/products/K420/inventory", { ...shopA, "X-SanMar-Environment": "edev" });
+    expect(new URL(fake.calls[2]!.url).host).toBe("edev-ws.sanmar.com:8080");
+    expect(JSON.stringify(lines)).not.toMatch(/pw-a|pw-b|shop-a|shop-b/);
+
+    // The supplier list says which headers to send, never a login.
+    const list = await ask("/v1/suppliers");
+    expect(list.body.suppliers[0]).toMatchObject({ id: "sanmar", defaultLogin: false, loginHeaders: ["X-SanMar-Customer-Number", "X-SanMar-Username", "X-SanMar-Password"] });
+  });
+
+  it("a request's login wins over the server's default one", async () => {
+    const { call, calls } = server({ GetInventoryLevelsRequest: fixture("promostandards/inventory-2.0.0.xml") });
+    await call("/v1/sanmar/products/K420/inventory", { headers: { "X-SanMar-Customer-Number": "9", "X-SanMar-Username": "other", "X-SanMar-Password": "x" } });
+    await call("/v1/sanmar/products/K420/inventory");
+    expect(calls.map((c) => /<shar:id>([^<]*)</.exec(c.xml)?.[1])).toEqual(["other", "webuser"]);
   });
 });

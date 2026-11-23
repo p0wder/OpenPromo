@@ -4,7 +4,7 @@ A free, open-source REST API for PromoStandards and SanMar web services that you
 
 Suppliers publish their catalog, stock, pricing, order status, tracking and invoices as SOAP web services, mostly to the [PromoStandards](https://promostandards.org) schemas. OpenPromo turns those into plain JSON over HTTPS. It is also a TypeScript library, so an app can call suppliers directly with no server in between.
 
-- **Your logins stay with you.** One install serves your own accounts. Supplier logins live in your environment variables and go nowhere but the supplier.
+- **A pass-through for any account.** Each request brings the supplier login it should use, in headers, and OpenPromo keeps none of it: no database and no logging of headers. One install can serve any number of accounts. To self-host for a single account, you can instead set that login as a default in env vars.
 - **It asks only when you ask.** There's no polling and no background jobs. Every call is one request to the supplier, made when you make it.
 - **It's checked against the suppliers' own documents.** Request and response shapes come from SanMar's Web Services Integration Guide v24.7 and Purchase Order Integration Guide v24.6 (October 2026). The test fixtures say which page each one comes from.
 
@@ -42,9 +42,9 @@ The full API is described at `GET /openapi.json` (OpenAPI 3.1). Money is in cent
 
 ## Run it
 
-You need a long random API key (`openssl rand -hex 32`) and your supplier logins. Copy `.env.example` to `.env` and fill it in.
+All the server needs is a long random API key (`openssl rand -hex 32`) in `OPENPROMO_API_KEY`. Supplier logins come with each request (see [Sending a login](#sending-a-login)).
 
-**Vercel.** Fork this repo and import it as a new Vercel project. Vercel builds it from the `Dockerfile` as a container. Set the environment variables from `.env.example` and deploy. Until they're set, every request answers 503 saying which one is missing. SanMar has had no IP restriction since July 2018, so no static IP is needed. Calls go out on port 8080 with TLS 1.2.
+**Vercel.** Fork this repo and import it as a new Vercel project. Vercel builds it from the `Dockerfile` as a container. Set `OPENPROMO_API_KEY` and deploy. Until it's set, every request answers 503 saying what's missing. SanMar has had no IP restriction since July 2018, so no static IP is needed. Calls go out on port 8080 with TLS 1.2.
 
 **Docker:**
 
@@ -63,17 +63,30 @@ node --env-file=.env dist/server/node.js
 Then try it:
 
 ```bash
-curl -H "Authorization: Bearer $OPENPROMO_API_KEY" http://localhost:8787/v1/sanmar/products/PC54/inventory
+curl http://localhost:8787/v1/sanmar/products/PC54/inventory \
+  -H "Authorization: Bearer $OPENPROMO_API_KEY" \
+  -H "X-SanMar-Customer-Number: 123456" -H "X-SanMar-Username: your-web-user" -H "X-SanMar-Password: …"
 ```
+
+## Sending a login
+
+Every `/v1` call needs the server's API key, plus the login of the account it is for:
+
+| Supplier | Headers |
+| --- | --- |
+| SanMar | `X-SanMar-Customer-Number`, `X-SanMar-Username`, `X-SanMar-Password` (a sanmar.com web-services user). Optional: `X-SanMar-Environment: edev` for SanMar's test environment (EDEV logins are separate), and `X-SanMar-Warehouse-Selection: on` if SanMar set the account up for Warehouse Selection. |
+| Other PromoStandards suppliers | `X-Supplier-Id`, `X-Supplier-Password`. Optional: `X-Supplier-Environment: test`. |
+
+The server uses the login for that one request and keeps nothing. It never logs these headers. Only send them over HTTPS. A request without a login uses the server's default login if one is set in env vars; otherwise it answers 400 and names the headers to send. `GET /v1/suppliers` lists each supplier's headers.
 
 ## Configuration
 
 | Variable | Required | What it does |
 | --- | --- | --- |
 | `OPENPROMO_API_KEY` | Yes | At least 24 characters. Callers send it as `Authorization: Bearer <key>`. Comma-separate several keys to rotate one. |
-| `SANMAR_CUSTOMER_NUMBER`, `SANMAR_USERNAME`, `SANMAR_PASSWORD` | For SanMar | Your customer number and a sanmar.com web-services user. Set all three or none. |
-| `SANMAR_ENVIRONMENT` | | `production` (the default) or `edev`, SanMar's test environment. EDEV has its own logins, which SanMar Integration Support issues. |
-| `SANMAR_WAREHOUSE_SELECTION` | | `on` only if SanMar set your account up for Warehouse Selection. Lines can then name a warehouse, and will call (`REN`, `CIN`, …) is allowed. |
+| `SANMAR_CUSTOMER_NUMBER`, `SANMAR_USERNAME`, `SANMAR_PASSWORD` | | An optional default SanMar login, for requests that send none (self-hosting for one account). Set all three or none. |
+| `SANMAR_ENVIRONMENT` | | The default SanMar environment: `production` (the default) or `edev`, SanMar's test environment with its own logins. A request can override it with `X-SanMar-Environment`. |
+| `SANMAR_WAREHOUSE_SELECTION` | | The default for `X-SanMar-Warehouse-Selection`: `on` only if SanMar set the account up for Warehouse Selection. Lines can then name a warehouse, and will call (`REN`, `CIN`, …) is allowed. |
 | `OPENPROMO_ORDERS` | | `on` lets `POST /v1/sanmar/orders` place real orders. It's off by default. |
 | `OPENPROMO_SUPPLIERS` | | Other PromoStandards suppliers, as JSON (see below). |
 | `PORT`, `HOST` | | For the Node server. Defaults are `8787` and `0.0.0.0`. |
@@ -91,10 +104,11 @@ Any supplier that implements the services above works once you give it its endpo
       "inventory": { "version": "2.0.0", "url": "https://ps.acme.example/inventory/v2" },
       "orderStatus": { "version": "1.0.0", "url": "https://ps.acme.example/orderstatus" }
     },
-    "login": { "id": "your-id", "password": "your-password" }
   }
 ]
 ```
+
+Callers then send `X-Supplier-Id` and `X-Supplier-Password` for `/v1/acme/…`. To give it a default login, add `"login": { "id": "…", "password": "…" }`.
 
 OpenPromo checks the config at start and refuses to run with a version it can't talk or a URL that isn't `https`.
 

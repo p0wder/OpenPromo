@@ -42,7 +42,7 @@ export function openApiDocument(origin: string) {
       title: "OpenPromo",
       version: "0.1.0",
       description:
-        "A free, self-hosted REST API over PromoStandards and SanMar web services. Money is in cents. Every /v1 call needs `Authorization: Bearer <OPENPROMO_API_KEY>`. Errors are `{ error: { kind, message, detail?, code?, supplier? } }`; `kind` is one of invalid, unauthorized, not_found, not_yet (shipped or invoiced data isn't there yet), auth / not_enabled / refused (the supplier turned the request down), rate_limited, unreachable, bad_response, duplicate, orders_off.",
+        "A free, self-hosted REST API over PromoStandards and SanMar web services. Money is in cents. Every /v1 call needs `Authorization: Bearer <OPENPROMO_API_KEY>` and the login of the account it is for, in headers: `X-SanMar-Customer-Number`, `X-SanMar-Username`, `X-SanMar-Password` (optional `X-SanMar-Environment: edev`) for SanMar, `X-Supplier-Id` and `X-Supplier-Password` for other PromoStandards suppliers. The server uses it for that request only and keeps nothing. Errors are `{ error: { kind, message, detail?, code?, supplier? } }`; `kind` is one of invalid, unauthorized, not_found, not_yet (shipped or invoiced data isn't there yet), auth / not_enabled / refused (the supplier turned the request down), rate_limited, unreachable, bad_response, duplicate, orders_off.",
       license: { name: "MIT" },
     },
     servers: [{ url: origin }],
