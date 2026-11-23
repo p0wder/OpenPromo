@@ -4,6 +4,7 @@
  * once, and each driver's own routes under its id.
  */
 import type { ServerConfig } from "./config.js";
+import { PURCHASE_ORDER_SCHEMA } from "./schemas.js";
 
 export function openApiDocument(origin: string, config?: Pick<ServerConfig, "suppliers">) {
   const supplier = { name: "supplier", in: "path", required: true, schema: { type: "string" }, description: 'A supplier id, e.g. "sanmar" or "ssactivewear" (see GET /v1/suppliers).' };
@@ -39,9 +40,15 @@ export function openApiDocument(origin: string, config?: Pick<ServerConfig, "sup
       },
     },
     Media: { type: "object", required: ["productId", "items"], properties: { productId: { type: "string" }, items: { type: "array", items: { $ref: "#/components/schemas/MediaItem" } } } },
+    PurchaseOrder: PURCHASE_ORDER_SCHEMA,
   };
+  const purchaseOrderBody = { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } };
+  const poSuppliers = "PromoStandards suppliers that list Purchase Order 1.0.0 only (their routes in GET /v1/suppliers/{supplier}); SanMar and S&S have their own order routes and bodies.";
+  const orderErrors = { "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" } };
   const driverPaths: Record<string, unknown> = {};
   for (const def of config?.suppliers.values() ?? []) {
+    // A PromoStandards supplier's routes are the shared order routes, documented once under /v1/{supplier}.
+    if (def.driver.kind === "promostandards") continue;
     for (const r of def.driver.routes ?? []) {
       const p = `/v1/${def.id}/${r.path.replace(/:(\w+)/g, "{$1}")}`;
       const params = [...r.path.matchAll(/:(\w+)/g)].map((m) => path(m[1]!, m[1]!));
@@ -93,6 +100,22 @@ export function openApiDocument(origin: string, config?: Pick<ServerConfig, "sup
       "/v1/{supplier}/orders/{poNumber}": get("Where the supplier's orders under this PO stand. Ask sparingly: suppliers ask for a few calls a day per order at most.", [path("poNumber", "Your PO number")], "the order status"),
       "/v1/{supplier}/orders/{poNumber}/shipments": get("Packages and tracking", [path("poNumber", "Your PO number")], "shipments, empty until something ships"),
       "/v1/{supplier}/invoices": get("Invoices by PO, invoice number, invoice date, or since a time", [query("po", "PO number"), query("invoice", "Invoice number"), query("date", "YYYY-MM-DD"), query("since", "ISO time")], "invoices, empty until invoiced"),
+      "/v1/{supplier}/orders": {
+        post: {
+          summary: `Place a Blank purchase order (PromoStandards PO 1.0.0 sendPO), once. ${poSuppliers} 403 orders_off unless the supplier is in OPENPROMO_ORDERS. 409 duplicate when Order Status shows a live order under the PO; 400 invalid for a supplier without Order Status unless skipDuplicateCheck is true. 424 not_enabled when the supplier doesn't take Blank orders.`,
+          parameters: [supplier],
+          requestBody: purchaseOrderBody,
+          responses: { "201": ok("{ accepted, poNumber, transactionId, total, messages, changes, duplicateCheck }"), ...orderErrors, ...errors },
+        },
+      },
+      "/v1/{supplier}/orders/check": {
+        post: {
+          summary: `Check a Blank purchase order without sending it (never calls sendPO): the same checks as placing it, Order Status and getSupportedOrderTypes included. ${poSuppliers}`,
+          parameters: [supplier],
+          requestBody: purchaseOrderBody,
+          responses: { "200": ok("{ ok, poNumber, total, currency, lines, changes, duplicateCheck }"), "409": { $ref: "#/components/responses/Error" }, ...errors },
+        },
+      },
       ...driverPaths,
     },
     "x-schemas-note": "Response shapes are the TypeScript types exported by the openpromo package (Product, Inventory, Pricing, OrderStatus, Shipment, Invoice, Media, and each driver's own).",

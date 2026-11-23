@@ -63,6 +63,8 @@ A supplier that can't answer a question says so (`404 not_offered`) before askin
 | `GET /v1/ssactivewear/native/styles[?search=&limit=]` | S&S's styles catalog (S&S asks for it once a day, not per search) |
 | `GET /v1/ssactivewear/native/products/{styleId}` | S&S's own products answer: every SKU, its field names, dollars |
 | `POST /v1/ssactivewear/orders` | Place an S&S order |
+| `POST /v1/{supplier}/orders/check` | Every PromoStandards supplier that lists Purchase Order 1.0.0: check a Blank order without sending it |
+| `POST /v1/{supplier}/orders` | The same suppliers: place a Blank order (`sendPO`) |
 
 Placing orders is off unless the supplier is listed in `OPENPROMO_ORDERS` (see [Placing orders](#placing-orders)).
 
@@ -145,7 +147,7 @@ Services and versions OpenPromo talks (the `endpoints` key, then the versions):
 | Order Shipment Notification | `shipments` | 1.0.0, 2.0.0, 2.1.0 (2.x also gives each package's ship-from and ship-to addresses, weight, dimensions and freight terms) |
 | Invoice | `invoices` | 1.0.0 |
 | Media Content | `media` | 1.1.0 (pictures, documents and video; also gives which products' media changed) |
-| Purchase Order | `purchaseOrder` | 1.0.0 (Blank orders, in the library: see [Placing orders](#placing-orders)) |
+| Purchase Order | `purchaseOrder` | 1.0.0 (Blank orders: `POST /v1/{id}/orders`, see [Placing orders](#placing-orders)) |
 
 A config with a version it can't talk or a URL that isn't `https` is refused at start.
 
@@ -182,9 +184,9 @@ Every client takes the login it should use and keeps no state, so one process ca
 
 ## Placing orders
 
-Ordering is switched on per supplier. `OPENPROMO_ORDERS` lists the ids that may place real orders: `OPENPROMO_ORDERS=sanmar` lets SanMar order and refuses S&S. `on` means SanMar and S&S Activewear, the suppliers with written drivers, and never a directory supplier, so an install that had `on` orders from just those two as before. `on` combines with ids (`on,acme`). Unset or `off` means no supplier orders. An id that isn't a supplier on this server (a typo, or one left out by `OPENPROMO_ENABLED_SUPPLIERS`) is a config error at start, naming it. A supplier that isn't listed answers every order route with `403 orders_off`, naming the supplier and the variable, before anything reaches it. `GET /v1/suppliers/{id}` says whether it may order here (`ordersAllowed`, and `allowed` on each of its write routes).
+Ordering is switched on per supplier. `OPENPROMO_ORDERS` lists the ids that may place real orders: `OPENPROMO_ORDERS=sanmar` lets SanMar order and refuses S&S, and `OPENPROMO_ORDERS=acme` lets a PromoStandards supplier with Purchase Order 1.0.0 order. `on` means SanMar and S&S Activewear, the suppliers with written drivers, and never a directory supplier, so an install that had `on` orders from just those two as before. `on` combines with ids (`on,acme`). Unset or `off` means no supplier orders. An id that isn't a supplier on this server (a typo, or one left out by `OPENPROMO_ENABLED_SUPPLIERS`) is a config error at start, naming it. A supplier that isn't listed answers every route that places an order with `403 orders_off`, naming the supplier and the variable, before anything reaches it. `GET /v1/suppliers/{id}` says whether it may order here (`ordersAllowed`, and `allowed` on each of its write routes).
 
-Both order routes check the order before sending (anything over the supplier's limits, a bad ZIP or an unknown ship method comes back `invalid`, with nothing placed), merge identical lines, and say every change they made in `changes`. Both first ask the supplier for live orders under the PO number and refuse with 409 if there are any. A send the supplier didn't answer (`unreachable` or `bad_response`) may still have gone through: look the PO up before sending again.
+The SanMar and S&S order routes check the order before sending (anything over the supplier's limits, a bad ZIP or an unknown ship method comes back `invalid`, with nothing placed), merge identical lines, and say every change they made in `changes`. Both first ask the supplier for live orders under the PO number and refuse with 409 if there are any. A send the supplier didn't answer (`unreachable` or `bad_response`) may still have gone through: look the PO up before sending again.
 
 **SanMar** (`POST /v1/sanmar/orders`):
 
@@ -213,7 +215,21 @@ It removes commas from every field (SanMar's file delimiter), refuses fields ove
 
 Lines are S&S SKUs (the `partId`s of `GET /v1/ssactivewear/products/{styleId}`). Ship methods are S&S's codes (1 Ground, the default; 16 3 Day Select; 3 2nd Day Air; 2 Next Day Air; 6 Will call). S&S may split one PO across warehouses: each S&S order comes back in `orders`.
 
-**PromoStandards Purchase Order 1.0.0** (library only for now: `PromoStandardsClient.sendPurchaseOrder(order)`, and `buildPurchaseOrder(order)` to check one without sending). Blank orders only (undecorated goods); Sample, Simple and Configured orders aren't built. Every line carries the buyer's own `unitPrice` in cents: OpenPromo never looks a price up or guesses one, and a line without one is `invalid`. It checks every required field, length and code list in the PO 1.0.0 schema (PO number 64, address lines and company 35, city 30, region 3, postal code 10, ISO country and currency codes), totals each line and the order, merges identical lines, and fills in only the currency (USD), the ship-to country (US) and the order date (now), each said in `changes`. It sends once, never retried, and answers the supplier's `transactionId`. A service message with severity Error is the supplier's refusal (nothing placed); an answer with no `transactionId`, a 5xx or no answer at all is `bad_response` or `unreachable`, and the order may have gone through. `getSupportedOrderTypes()` says which order types a supplier takes.
+**PromoStandards suppliers** (`POST /v1/{supplier}/orders`, for every supplier that lists Purchase Order 1.0.0 at an https URL; `GET /v1/suppliers/{id}` lists the route when it does). List the supplier's id in `OPENPROMO_ORDERS` first. The body is one shape for all of them (the `PurchaseOrder` schema at `/openapi.json`), money in cents:
+
+```json
+{
+  "poNumber": "1042-1",
+  "shipTo": { "companyName": "Acme", "attentionTo": "Pat", "address1": "12 Main St", "city": "Austin", "region": "TX", "postalCode": "78701", "country": "US" },
+  "carrier": "UPS",
+  "service": "GROUND",
+  "lines": [{ "productId": "PC54", "partId": "118032", "quantity": 12, "unitPrice": 312 }]
+}
+```
+
+Before sending, in this order: the supplier is in `OPENPROMO_ORDERS` (else `403 orders_off`); the order passes every check below (else `400 invalid`, saying all of it); the supplier lists Order Status, so OpenPromo can look for an earlier copy (else `400 invalid` saying it can't, unless the body has `"skipDuplicateCheck": true` because you made sure yourself); the supplier takes Blank orders (`getSupportedOrderTypes`, else `424 not_enabled`); and Order Status shows no live order under the PO (else `409 duplicate`, with those orders). `skipDuplicateCheck` changes nothing for a supplier with Order Status: OpenPromo always looks. Then it sends once and answers `201` with `{ accepted, poNumber, transactionId, total, messages, changes, duplicateCheck }` (`duplicateCheck` is `orderStatus` or `skipped`). Keep the `transactionId`. A supplier's refusal is `refused`, `auth` or `not_enabled` (424), nothing placed; `unreachable` or `bad_response` means it may have gone through, so look the PO up before sending again. `POST /v1/{supplier}/orders/check` takes the same body and makes the same checks (Order Status and the order types included) without ever calling `sendPO`, whether or not ordering is on, and answers `200` with the lines, total, currency and changes as they would be sent.
+
+**PromoStandards Purchase Order 1.0.0** (in the library too: `PromoStandardsClient.sendPurchaseOrder(order)`, which checks neither `OPENPROMO_ORDERS` nor Order Status, and `buildPurchaseOrder(order)` to check one without sending). Blank orders only (undecorated goods); Sample, Simple and Configured orders aren't built. Every line carries the buyer's own `unitPrice` in cents: OpenPromo never looks a price up or guesses one, and a line without one is `invalid`. It checks every required field, length and code list in the PO 1.0.0 schema (PO number 64, address lines and company 35, city 30, region 3, postal code 10, ISO country and currency codes), totals each line and the order, merges identical lines, and fills in only the currency (USD), the ship-to country (US) and the order date (now), each said in `changes`. It sends once, never retried, and answers the supplier's `transactionId`. A service message with severity Error is the supplier's refusal (nothing placed); an answer with no `transactionId`, a 5xx or no answer at all is `bad_response` or `unreachable`, and the order may have gone through. `getSupportedOrderTypes()` says which order types a supplier takes.
 
 ## Be gentle with suppliers
 
@@ -237,7 +253,7 @@ Every shape comes from the suppliers' published guides, and S&S's catalog calls 
 
 ## Changes
 
-**Unreleased.** `OPENPROMO_ORDERS` is a list of the suppliers that may order (`on` still means SanMar and S&S). `orders_off` names the supplier. `GET /v1/suppliers/{id}` gives `ordersAllowed`. In the library, `ServerConfig.allowOrders` is now `orders` (a set of ids), checked with `mayOrder(config, id)`. PromoStandards Purchase Order 1.0.0 for Blank orders in the library: `buildPurchaseOrder`, `PromoStandardsClient.sendPurchaseOrder` and `getSupportedOrderTypes`, with `purchaseOrder` as an `endpoints` key.
+**Unreleased.** `OPENPROMO_ORDERS` is a list of the suppliers that may order (`on` still means SanMar and S&S). `orders_off` names the supplier. `GET /v1/suppliers/{id}` gives `ordersAllowed`. In the library, `ServerConfig.allowOrders` is now `orders` (a set of ids), checked with `mayOrder(config, id)`. PromoStandards Purchase Order 1.0.0 for Blank orders in the library: `buildPurchaseOrder`, `PromoStandardsClient.sendPurchaseOrder` and `getSupportedOrderTypes`, with `purchaseOrder` as an `endpoints` key. `POST /v1/{supplier}/orders` and `/orders/check` for every PromoStandards supplier that lists Purchase Order 1.0.0, with the double-order guard (`409 duplicate`, or `400 invalid` without Order Status unless `skipDuplicateCheck`); the `PurchaseOrder` body schema in `/openapi.json`. In the library, `promoStandardsDriver` connections carry `ps` (the client) and such a driver has `PURCHASE_ORDER_ROUTES`.
 
 **0.2.0.** One API for every supplier. S&S Activewear. The supplier directory and registry. `GET /v1/sanmar/products/{style}` now answers the shared `Product` (from SanMar's PromoStandards Product Data); SanMar's Product Info moved to `/v1/sanmar/native/product-info/{style}`, and `pricing` without `priceType` to `/v1/sanmar/native/pricing/{style}`. `/health` reports a count of suppliers, not their ids.
 
