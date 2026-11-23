@@ -4,7 +4,8 @@
  * on S&S's JSON, no network. A part is an S&S SKU; a product is an S&S style
  * (its numeric style id).
  */
-import type { Inventory, Invoice, InvoiceLine, OrderLine, OrderState, OrderStatus, PriceType, Pricing, Product, SalesOrder, Shipment } from "../promostandards/types.js";
+import type { Inventory, Invoice, InvoiceLine, Media, OrderLine, OrderState, OrderStatus, PriceType, Pricing, Product, SalesOrder, Shipment } from "../promostandards/types.js";
+import { imageMedia, MEDIA_CLASS, type MediaFilter, type SupplierImage } from "../suppliers/media.js";
 import type { SsOrder, SsOrderLine, SsProduct, SsStyle } from "./types.js";
 
 const IMAGE_BASE = "https://www.ssactivewear.com/";
@@ -73,6 +74,30 @@ export function ssProduct(style: SsStyle, products: readonly SsProduct[]): Produ
       };
     }),
   };
+}
+
+/**
+ * A style's pictures: the style's own image (Primary, of the whole product),
+ * then each SKU's color images (front, back, side, swatch). A picture S&S
+ * gives for several SKUs is one item, with their color.
+ */
+export function ssMedia(style: SsStyle, products: readonly SsProduct[], filter: MediaFilter = {}): Media {
+  const images: SupplierImage[] = [];
+  const primary = ssImage(style.styleImage);
+  if (primary) images.push({ url: primary, partIds: [], classTypes: [MEDIA_CLASS.primary] });
+  for (const p of products) {
+    const views: [string | undefined, { id: string; name: string }][] = [
+      [p.colorFrontImage, MEDIA_CLASS.front],
+      [p.colorBackImage, MEDIA_CLASS.rear],
+      [p.colorSideImage, MEDIA_CLASS.side],
+      [p.colorSwatchImage, MEDIA_CLASS.swatch],
+    ];
+    for (const [path, classType] of views) {
+      const url = ssImage(path);
+      if (url) images.push({ url, color: p.colorName, partIds: [p.sku], classTypes: [classType] });
+    }
+  }
+  return imageMedia(String(style.styleID), images, filter, products.map((p) => p.sku));
 }
 
 /** Stock per SKU and warehouse. `partIds` keeps it to those SKUs. */

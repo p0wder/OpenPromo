@@ -7,7 +7,7 @@
  */
 import { createHash, timingSafeEqual } from "node:crypto";
 import { OpenPromoError, type OpenPromoErrorKind } from "../errors.js";
-import type { InvoiceQuery, PriceType } from "../promostandards/types.js";
+import type { InvoiceQuery, MediaType, PriceType } from "../promostandards/types.js";
 import { CAPABILITIES, type Capability, type DriverRoute, type SupplierConnection } from "../suppliers/driver.js";
 import { connectionFor, environmentHeader, type ServerConfig, type SupplierDef } from "./config.js";
 import { openApiDocument } from "./openapi.js";
@@ -62,6 +62,7 @@ function invoiceQuery(params: URLSearchParams): InvoiceQuery {
 }
 
 const PRICE_TYPES = new Set(["Net", "List", "Customer"]);
+const MEDIA_TYPES = new Set(["Image", "Video", "Audio", "Document"]);
 
 /** A driver route's `:name` segments against the path, or null when it doesn't match. */
 function matchRoute(pattern: string, rest: readonly string[]): Record<string, string> | null {
@@ -193,6 +194,21 @@ export function createHandler(config: ServerConfig, opts: HandlerOptions = {}): 
         const pricing = await ask("pricing")(id, { priceType: priceType as PriceType, partId: url.searchParams.get("partId") ?? undefined, fobId: url.searchParams.get("fobId") ?? undefined });
         return pricing ? json(200, pricing) : fail("not_found", `${def.name} has no product ${id}.`, { supplier: def.id });
       }
+      if (rest[2] === "media") {
+        if (!offers("media")) return notOffered("media");
+        const type = url.searchParams.get("type") ?? "Image";
+        if (!MEDIA_TYPES.has(type)) throw new OpenPromoError("invalid", "type must be Image, Video, Audio or Document.");
+        const filter = { mediaType: type as MediaType, partId: url.searchParams.get("partId") || undefined, classType: url.searchParams.get("classType") || undefined };
+        const media = await ask("media")(id, filter);
+        return media ? json(200, media) : fail("not_found", `${def.name} has no product ${id}.`, { supplier: def.id });
+      }
+    }
+
+    if (method === "GET" && rest[0] === "media" && rest[1] === "changes" && rest.length === 2) {
+      if (!offers("mediaChanges")) return notOffered("mediaChanges");
+      const since = url.searchParams.get("since") ?? "";
+      if (!/^\d{4}-\d{2}-\d{2}/.test(since) || Number.isNaN(Date.parse(since))) throw new OpenPromoError("invalid", "Say since when: ?since=<ISO time>, e.g. 2026-11-01T00:00:00Z.");
+      return json(200, { since, productIds: await ask("mediaChanges")(since) });
     }
 
     if (method === "GET" && rest[0] === "orders" && rest[1] && rest.length <= 3) {

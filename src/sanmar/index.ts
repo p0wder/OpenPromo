@@ -15,6 +15,7 @@ import { asArray, node, readSoapBody, sendSoap, soapRequest, text, type SoapBody
 import { buildSanmarOrder, readSanmarPreSubmit, sanmarRefusal, type BuiltSanmarOrder, type SanmarOrder, type SanmarOrderOptions, type SanmarPreSubmit } from "./order.js";
 
 export * from "./constants.js";
+export * from "./media.js";
 export * from "./order.js";
 
 export type SanmarEnvironment = "production" | "edev";

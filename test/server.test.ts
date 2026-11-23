@@ -104,8 +104,8 @@ describe("the API", () => {
     const { call } = server({});
     const all = await call("/v1/suppliers");
     expect(all.body.suppliers.slice(0, 2)).toEqual([
-      { id: "sanmar", name: "SanMar", kind: "native", capabilities: ["product", "inventory", "pricing", "orderStatus", "shipments", "invoices"], loginHeaders: ["X-SanMar-Customer-Number", "X-SanMar-Username", "X-SanMar-Password"], defaultLogin: true, environment: "production" },
-      { id: "ssactivewear", name: "S&S Activewear", kind: "native", capabilities: ["product", "inventory", "pricing", "orderStatus", "shipments", "invoices"], loginHeaders: ["X-Supplier-Id", "X-Supplier-Password"], defaultLogin: false, environment: "production" },
+      { id: "sanmar", name: "SanMar", kind: "native", capabilities: ["product", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media"], loginHeaders: ["X-SanMar-Customer-Number", "X-SanMar-Username", "X-SanMar-Password"], defaultLogin: true, environment: "production" },
+      { id: "ssactivewear", name: "S&S Activewear", kind: "native", capabilities: ["product", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media"], loginHeaders: ["X-Supplier-Id", "X-Supplier-Password"], defaultLogin: false, environment: "production" },
     ]);
     expect(JSON.stringify(all.body)).not.toMatch(/webuser|188646/);
     // S&S's own driver first; S&S Activewear's PromoStandards listing is skipped in favor of it.
