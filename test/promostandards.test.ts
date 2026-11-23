@@ -488,16 +488,16 @@ describe("Media Content 1.1.0", () => {
     expect(await acme({ GetMediaDateModifiedRequest: none }).ps.getMediaChanges("2026-11-20T00:00:00Z")).toEqual([]);
   });
 
-  it("a supplier without the service says so; a media endpoint adds no driver capability yet and leaves the others alone", async () => {
+  it("a supplier without the service says so; a media endpoint adds media and mediaChanges and leaves the others alone", async () => {
     const none = new PromoStandardsClient({ id: "acme", name: "Acme Promo", endpoints: { shipments: { version: "2.1.0", url: "https://ps.acme.example/osn21" } } }, login, { fetch: fakeSoap({}).fetch });
     await expect(none.getMedia("PC54")).rejects.toMatchObject({ kind: "not_enabled" });
-    // SanMar lists Media Content 1.1.0; its connection still answers only the services it did before.
+    // SanMar lists Media Content 1.1.0, so its PromoStandards connection has media too (SanMar's driver answers media from Product Info instead).
     expect(SANMAR_PROMOSTANDARDS.endpoints.media).toEqual({ version: "1.1.0", url: "https://ws.sanmar.com:8080/promostandards/MediaContentServiceBinding", testUrl: "https://edev-ws.sanmar.com:8080/promostandards/MediaContentServiceBinding" });
-    expect(Object.keys(promoStandardsConnection(new PromoStandardsClient(SANMAR_PROMOSTANDARDS, login)))).toEqual(["product", "inventory", "pricing", "orderStatus", "shipments", "invoices"]);
+    expect(Object.keys(promoStandardsConnection(new PromoStandardsClient(SANMAR_PROMOSTANDARDS, login)))).toEqual(["product", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media", "mediaChanges"]);
     const both = { ...ACME, endpoints: { ...ACME.endpoints, shipments: { version: "2.1.0", url: "https://ps.acme.example/osn21" } } };
     expect(checkSupplierConfig(both)).toEqual([]);
-    expect(promoStandardsCapabilities(both)).toEqual(["shipments"]);
-    expect(Object.keys(promoStandardsConnection(new PromoStandardsClient(both, login)))).toEqual(["shipments"]);
+    expect(promoStandardsCapabilities(both)).toEqual(["shipments", "media", "mediaChanges"]);
+    expect(Object.keys(promoStandardsConnection(new PromoStandardsClient(both, login)))).toEqual(["shipments", "media", "mediaChanges"]);
   });
 });
 

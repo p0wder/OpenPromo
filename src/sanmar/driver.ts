@@ -1,14 +1,18 @@
 /**
  * SanMar as a driver. The shared questions are answered by SanMar's
  * PromoStandards services, so part ids match across product, stock, prices,
- * orders and invoices. SanMar's own services are driver routes: Product Info
- * (colors, images, standard prices), its price list with `myPrice` (the
- * account's own price), and the PO service (check and place orders).
+ * orders and invoices. Media is the exception: it comes from SanMar's own
+ * Product Info images, which name each view, and SanMar doesn't answer
+ * getMediaDateModified, so there's no `mediaChanges`. SanMar's own services
+ * are driver routes: Product Info (colors, images, standard prices), its
+ * price list with `myPrice` (the account's own price), and the PO service
+ * (check and place orders).
  */
 import { SANMAR_ORDER_SCHEMA } from "../server/schemas.js";
 import { errorAnswer, liveOrdersUnder, type SupplierConnection, type SupplierDriver } from "../suppliers/driver.js";
 import { promoStandardsConnection } from "../suppliers/promostandards.js";
 import { SanmarClient, type SanmarEnvironment, type SanmarOrder } from "./index.js";
+import { sanmarMedia } from "./media.js";
 
 export interface SanmarConnection extends SupplierConnection {
   sanmar: SanmarClient;
@@ -26,7 +30,7 @@ export const sanmarDriver: SupplierDriver<SanmarConnection> = {
   id: "sanmar",
   name: "SanMar",
   kind: "native",
-  capabilities: ["product", "inventory", "pricing", "orderStatus", "shipments", "invoices"],
+  capabilities: ["product", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media"],
   login: [
     { key: "customer_number", header: "X-SanMar-Customer-Number", label: "SanMar customer number" },
     { key: "username", header: "X-SanMar-Username", label: "sanmar.com web-services user" },
@@ -41,7 +45,17 @@ export const sanmarDriver: SupplierDriver<SanmarConnection> = {
       { customerNumber: login.customer_number ?? "", username: login.username ?? "", password: login.password ?? "" },
       { environment: opts.environment as SanmarEnvironment, fetch: opts.fetch },
     );
-    return { ...promoStandardsConnection(sanmar.promoStandards()), sanmar };
+    // SanMar's PromoStandards config lists Media Content, but media answers from Product Info, and SanMar doesn't answer getMediaDateModified.
+    const { mediaChanges: _unsupported, ...shared } = promoStandardsConnection(sanmar.promoStandards());
+    return {
+      ...shared,
+      async media(productId, filter) {
+        if (filter.mediaType && filter.mediaType !== "Image") return { productId: productId.trim().toUpperCase(), items: [] };
+        const product = await sanmar.productInfo(productId);
+        return product ? sanmarMedia(product, filter) : null;
+      },
+      sanmar,
+    };
   },
   routes: [
     {

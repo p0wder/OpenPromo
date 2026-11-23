@@ -29,6 +29,10 @@ Suppliers publish their catalog, stock, pricing, order status, tracking and invo
 | Where the orders under a PO stand | `GET /v1/{supplier}/orders/{po}` | `{ purchaseOrderNumber, orders: SalesOrder[] }` |
 | Packages and tracking | `GET /v1/{supplier}/orders/{po}/shipments` | `{ purchaseOrderNumber, shipments: Shipment[] }` |
 | Invoices | `GET /v1/{supplier}/invoices?po=…` (or `invoice=`, `date=`, `since=`) | `{ invoices: Invoice[] }` |
+| Pictures, documents and video | `GET /v1/{supplier}/products/{id}/media[?type=Image\|Video\|Audio\|Document&partId=…&classType=…]` | `Media` |
+| Which products' media changed | `GET /v1/{supplier}/media/changes?since=<ISO time>` | `{ since, productIds: string[] }` |
+
+**Media.** `Media` is `{ productId, items: MediaItem[] }`; each item has its `url`, `mediaType`, `classTypes` (`{ id, name }`, PromoStandards' class types: 1004 Swatch, 1006 Primary, 1007 Front, 1008 Rear, …) and, when the supplier says, `partId`, `color`, size, dpi, decorations and locations. `type` is one media type per call (Image by default); `classType` is an id (`1007`) or a name (`Front`); `partId` gives that part's media and the whole product's. PromoStandards suppliers answer from Media Content 1.1.0. SanMar answers from its own Product Info images and S&S from its color images, with PromoStandards' class names where they match (front, back as Rear, swatch, the style's main picture as Primary) and OpenPromo's words where none does (`side`, `threeQuarter`, `model`, `flat`, and SanMar's `colorsAvailable`). Their pictures are per color, so an item carries a `partId` only when it shows exactly one part. They only have images, so other types come back empty. Neither can say what changed (SanMar doesn't answer `getMediaDateModified`), so `media/changes` is `not_offered` there: `?capability=media` and `?capability=mediaChanges` on `GET /v1/suppliers` say who answers each.
 
 A supplier that can't answer a question says so (`404 not_offered`) before asking for a login. The full API, every supplier's own routes included, is at `GET /openapi.json` (OpenAPI 3.1). Money is in cents. The shapes are the TypeScript types the package exports. Errors look like this:
 
@@ -221,6 +225,7 @@ Every shape comes from the suppliers' published guides, and S&S's catalog calls 
 - **SanMar's wording for a disabled service.** The "not enabled" message for SanMar's own services isn't documented. OpenPromo reads anything mentioning "not enabled / not authorized" as `not_enabled`.
 - **S&S's order fields.** Status words, tracking, invoice and line fields on `/v2/orders/{po}?lines=true`, the order post's answer, and the invoiced-between-dates parameters are named as we read S&S's docs.
 - **Order Shipment Notification 2.0.0 and 2.1.0.** The test fixtures are built from the official schemas, not from a supplier's live answer.
+- **Media Content 1.1.0.** The reader is tested against fixtures built from the official schema. SanMar's and S&S's media come from the image fields Inkline already reads; the class types given to each view are OpenPromo's choice.
 - **S&S style lookups by name.** `/v2/styles/{identifier}` with a part number or "Brand Style" (numeric style ids are proven).
 
 ## Changes

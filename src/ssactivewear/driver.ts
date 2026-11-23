@@ -8,11 +8,12 @@ import type { InvoiceQuery, OrderQuery } from "../promostandards/types.js";
 import { SS_ORDER_SCHEMA } from "../server/schemas.js";
 import { errorAnswer, liveOrdersUnder, type SupplierConnection, type SupplierDriver } from "../suppliers/driver.js";
 import { SsActivewearClient, type SsActivewearClientOptions } from "./client.js";
-import { ssInventory, ssInvoices, ssOrderStatus, ssPricing, ssProduct, ssShipments } from "./map.js";
+import { ssInventory, ssInvoices, ssMedia, ssOrderStatus, ssPricing, ssProduct, ssShipments } from "./map.js";
 import { placeSsOrder, type SsOrderInput } from "./order.js";
 import type { SsOrder, SsStyle } from "./types.js";
 
-export interface SsActivewearConnection extends Required<SupplierConnection> {
+/** Every shared question but `mediaChanges`: S&S can't say whose pictures changed. */
+export interface SsActivewearConnection extends Required<Omit<SupplierConnection, "mediaChanges">> {
   ss: SsActivewearClient;
 }
 
@@ -44,6 +45,11 @@ export function ssActivewearConnection(ss: SsActivewearClient): SsActivewearConn
       const products = id ? await ss.products(id) : [];
       return products.length ? ssPricing(id!, products, opts.priceType, { partId: opts.partId }) : null;
     },
+    async media(productId, filter) {
+      if (filter.mediaType && filter.mediaType !== "Image") return { productId, items: [] };
+      const style = await styleOf(productId);
+      return style ? ssMedia(style, await ss.products(style.styleID), filter) : null;
+    },
     orderStatus: async (query) => ssOrderStatus(await ordersFor(query)),
     shipments: async (query) => ssShipments(await ordersFor(query)),
     async invoices(query: InvoiceQuery) {
@@ -65,7 +71,7 @@ export const ssActivewearDriver: SupplierDriver<SsActivewearConnection> = {
   id: "ssactivewear",
   name: "S&S Activewear",
   kind: "native",
-  capabilities: ["product", "inventory", "pricing", "orderStatus", "shipments", "invoices"],
+  capabilities: ["product", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media"],
   login: [
     { key: "account_number", header: "X-Supplier-Id", label: "S&S account number" },
     { key: "api_key", header: "X-Supplier-Password", label: "S&S API key" },

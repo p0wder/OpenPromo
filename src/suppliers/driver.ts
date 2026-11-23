@@ -9,10 +9,15 @@
  * and leaves out what the supplier can't answer. Anything only one supplier
  * does (SanMar's own price list, placing an order) is a driver route.
  */
-import type { Inventory, Invoice, InvoiceQuery, OrderQuery, OrderStatus, PriceType, Pricing, Product, Shipment } from "../promostandards/types.js";
+import type { Inventory, Invoice, InvoiceQuery, Media, OrderQuery, OrderStatus, PriceType, Pricing, Product, Shipment } from "../promostandards/types.js";
+import type { MediaFilter } from "./media.js";
 
-/** The shared questions, the same paths and shapes for every supplier. */
-export const CAPABILITIES = ["product", "inventory", "pricing", "orderStatus", "shipments", "invoices"] as const;
+/**
+ * The shared questions, the same paths and shapes for every supplier.
+ * `mediaChanges` (which products' media changed since a time) is its own
+ * question: some suppliers answer `media` but can't say what changed.
+ */
+export const CAPABILITIES = ["product", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media", "mediaChanges"] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
 /** One field of a supplier login, and the request header it comes in. */
@@ -42,6 +47,10 @@ export interface SupplierConnection {
   orderStatus?(query: OrderQuery): Promise<OrderStatus[]>;
   shipments?(query: OrderQuery): Promise<Shipment[]>;
   invoices?(query: InvoiceQuery): Promise<Invoice[]>;
+  /** A product's pictures (or documents, videos, sound: one media type per call, Image by default). Null when the supplier has no such product. */
+  media?(productId: string, filter: MediaFilter): Promise<Media | null>;
+  /** The product ids whose media changed since a time (ISO 8601). */
+  mediaChanges?(since: string): Promise<string[]>;
 }
 
 /** What a driver route is handed. */

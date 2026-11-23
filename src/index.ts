@@ -12,6 +12,7 @@ export * from "./sanmar/index.js";
 export * from "./sanmar/driver.js";
 export * from "./ssactivewear/index.js";
 export * from "./suppliers/driver.js";
+export * from "./suppliers/media.js";
 export * from "./suppliers/promostandards.js";
 export * from "./suppliers/registry.js";
 export { DIRECTORY, buildDirectory, type DirectoryOverrides } from "./directory/index.js";
