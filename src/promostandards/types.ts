@@ -124,12 +124,57 @@ export type OrderQuery = { poNumber: string } | { salesOrderNumber: string } | {
 
 /* ---------------------------------------------------------------- Shipment Notification */
 
+/** A ship-from or ship-to address, as Order Shipment Notification 2.x gives it. */
+export interface ShippingAddress {
+  attentionTo?: string;
+  companyName?: string;
+  address1: string;
+  address2?: string;
+  address3?: string;
+  city: string;
+  /** State or province ("TX"). */
+  region: string;
+  postalCode: string;
+  /** ISO 3166 two-letter code. */
+  country?: string;
+  email?: string;
+  phone?: string;
+}
+
+export interface ShipmentItem {
+  productId?: string;
+  partId?: string;
+  quantity: number;
+  /** The unit the quantity counts ("EA", "DZ"), when the supplier says (OSN 2.x). */
+  uom?: string;
+  /** The line of the customer's PO this is, when the supplier says (OSN 2.x). */
+  lineNumber?: string;
+}
+
+/**
+ * One package. Everything after `items` is optional and given only by
+ * services that send it (Order Shipment Notification 2.x): left out, not
+ * empty, when the supplier doesn't say.
+ */
 export interface ShipmentPackage {
   trackingNumber: string;
   carrier?: string;
+  /** The carrier's service ("Ground"). */
   method?: string;
   shippedOn?: string;
-  items: { productId?: string; partId?: string; quantity: number }[];
+  items: ShipmentItem[];
+  shipFrom?: ShippingAddress;
+  shipTo?: ShippingAddress;
+  /** "Commercial", "Residential" or "Other". */
+  destinationType?: string;
+  /** The customer collects it rather than a carrier delivering it. */
+  customerPickup?: boolean;
+  weight?: { value: number; uom: string };
+  dimensions?: { uom: string; length?: number; width?: number; height?: number };
+  /** The freight account the package shipped on. */
+  shippingAccount?: string;
+  /** Freight terms ("Prepaid", "Collect"), the supplier's words. */
+  shipmentTerms?: string;
 }
 
 export interface Shipment {

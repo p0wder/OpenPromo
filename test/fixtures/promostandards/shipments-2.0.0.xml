@@ -1,0 +1,56 @@
+<!-- source: OSN 2.0.0 schema (GetOrderShipmentNotificationResponse.xsd and SharedOSNObjects.xsd, promostandards.org OSN2-0-0-1.zip), not a live answer: element names, order and namespaces as the schema gives them, values made up -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:GetOrderShipmentNotificationResponse xmlns:ns2="http://www.promostandards.org/WSDL/OrderShipmentNotificationService/2.0.0/" xmlns:ns3="http://www.promostandards.org/WSDL/OrderShipmentNotificationService/2.0.0/SharedObjects/">
+ <ns2:OrderShipmentNotificationArray><ns2:OrderShipmentNotification>
+  <ns3:purchaseOrderNumber>PO2001</ns3:purchaseOrderNumber><ns2:purchaseOrderShippedInFull>false</ns2:purchaseOrderShippedInFull>
+  <ns2:SalesOrderArray>
+   <ns2:SalesOrder>
+    <ns3:salesOrderNumber>SO-100</ns3:salesOrderNumber><ns2:salesOrderShippedInFull>true</ns2:salesOrderShippedInFull>
+    <ns2:ShipmentArray><ns2:Shipment>
+     <ns2:destinationShippedInFull>true</ns2:destinationShippedInFull><ns2:customerPickup>false</ns2:customerPickup>
+     <ns2:shipFromAddress><ns3:companyName>Acme Promo DC</ns3:companyName><ns2:address1>100 Warehouse Way</ns2:address1><ns3:city>Irving</ns3:city><ns3:region>TX</ns3:region><ns3:postalCode>75038</ns3:postalCode><ns3:country>US</ns3:country></ns2:shipFromAddress>
+     <ns2:shipToAddress><ns3:attentionTo>Receiving</ns3:attentionTo><ns3:companyName>Ink Shop</ns3:companyName><ns2:address1>12 Main St</ns2:address1><ns2:address2>Suite 4</ns2:address2><ns3:city>Jacksonville</ns3:city><ns3:region>FL</ns3:region><ns3:postalCode>32218</ns3:postalCode><ns3:country>US</ns3:country><ns3:phone>904-555-0100</ns3:phone></ns2:shipToAddress>
+     <ns2:shipmentDestinationType>Commercial</ns2:shipmentDestinationType>
+     <ns2:PackageArray>
+      <ns2:Package>
+       <ns2:id>1</ns2:id><ns3:trackingNumber>1Z999AA10123456784</ns3:trackingNumber><ns2:shipmentDate>2026-11-20T14:05:00-06:00</ns2:shipmentDate>
+       <ns3:Dimension><ns3:DimensionSize><ns3:dimUOM>Inches</ns3:dimUOM><ns3:length>18</ns3:length><ns3:width>12</ns3:width><ns3:height>10.5</ns3:height></ns3:DimensionSize><ns3:DimensionWeight><ns3:weightUOM>Pounds</ns3:weightUOM><ns3:weight>14.2</ns3:weight></ns3:DimensionWeight></ns3:Dimension>
+       <ns3:FreightDetails><ns3:carrier>UPS</ns3:carrier><ns3:service>Ground</ns3:service></ns3:FreightDetails>
+       <ns3:shippingAccount>A1B2C3</ns3:shippingAccount><ns3:shipmentTerms>Prepaid</ns3:shipmentTerms>
+       <ns2:ItemArray>
+        <ns2:Item><ns3:supplierProductId>PC54</ns3:supplierProductId><ns3:supplierPartId>538612</ns3:supplierPartId><ns2:purchaseOrderLineNumber>1</ns2:purchaseOrderLineNumber><ns3:Quantity><ns3:value>24</ns3:value><ns3:uom>EA</ns3:uom></ns3:Quantity></ns2:Item>
+        <ns2:Item><ns3:supplierProductId>PC54</ns3:supplierProductId><ns3:supplierPartId>538613</ns3:supplierPartId><ns2:purchaseOrderLineNumber>2</ns2:purchaseOrderLineNumber><ns3:Quantity><ns3:value>12</ns3:value><ns3:uom>EA</ns3:uom></ns3:Quantity></ns2:Item>
+       </ns2:ItemArray>
+       <ns2:preProductionProof>No</ns2:preProductionProof>
+      </ns2:Package>
+      <ns2:Package>
+       <ns2:id>2</ns2:id><ns3:trackingNumber>1Z999AA10123456785</ns3:trackingNumber><ns2:shipmentDate>2026-11-20T14:05:00-06:00</ns2:shipmentDate>
+       <ns3:FreightDetails><ns3:carrier>UPS</ns3:carrier><ns3:service>Ground</ns3:service></ns3:FreightDetails>
+       <ns2:ItemArray>
+        <ns2:Item><ns3:supplierProductId>K420</ns3:supplierProductId><ns3:supplierPartId>92032</ns3:supplierPartId><ns3:Quantity><ns3:value>6</ns3:value><ns3:uom>EA</ns3:uom></ns3:Quantity></ns2:Item>
+       </ns2:ItemArray>
+       <ns2:preProductionProof>No</ns2:preProductionProof>
+      </ns2:Package>
+     </ns2:PackageArray>
+    </ns2:Shipment></ns2:ShipmentArray>
+   </ns2:SalesOrder>
+   <ns2:SalesOrder>
+    <ns3:salesOrderNumber>SO-101</ns3:salesOrderNumber><ns2:salesOrderShippedInFull>false</ns2:salesOrderShippedInFull>
+    <ns2:ShipmentArray><ns2:Shipment>
+     <ns2:destinationShippedInFull>false</ns2:destinationShippedInFull><ns2:customerPickup>true</ns2:customerPickup>
+     <ns2:shipFromAddress><ns2:address1>100 Warehouse Way</ns2:address1><ns3:city>Irving</ns3:city><ns3:region>TX</ns3:region><ns3:postalCode>75038</ns3:postalCode></ns2:shipFromAddress>
+     <ns2:shipToAddress><ns2:address1>100 Warehouse Way</ns2:address1><ns3:city>Irving</ns3:city><ns3:region>TX</ns3:region><ns3:postalCode>75038</ns3:postalCode></ns2:shipToAddress>
+     <ns2:PackageArray>
+      <ns2:Package>
+       <ns2:shipmentDate>2026-11-21T09:30:00-06:00</ns2:shipmentDate>
+       <ns2:ItemArray>
+        <ns2:Item><ns3:supplierProductId>ST860</ns3:supplierProductId><ns3:supplierPartId>1019704</ns3:supplierPartId><ns2:purchaseOrderLineNumber>3</ns2:purchaseOrderLineNumber><ns3:Quantity><ns3:value>2</ns3:value><ns3:uom>DZ</ns3:uom></ns3:Quantity></ns2:Item>
+       </ns2:ItemArray>
+       <ns2:preProductionProof>Unknown</ns2:preProductionProof>
+      </ns2:Package>
+     </ns2:PackageArray>
+    </ns2:Shipment></ns2:ShipmentArray>
+   </ns2:SalesOrder>
+  </ns2:SalesOrderArray>
+ </ns2:OrderShipmentNotification></ns2:OrderShipmentNotificationArray>
+</ns2:GetOrderShipmentNotificationResponse></S:Body></S:Envelope>

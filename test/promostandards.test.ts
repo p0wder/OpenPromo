@@ -104,6 +104,105 @@ describe("Order Shipment Notification 1.0.0", () => {
   });
 });
 
+describe("Order Shipment Notification 2.0.0", () => {
+  const ACME = { id: "acme", name: "Acme Promo", endpoints: { shipments: { version: "2.0.0", url: "https://ps.acme.example/osn2" } } };
+  const acme = (answer: string) => {
+    const fake = fakeSoap({ GetOrderShipmentNotificationRequest: answer });
+    return { ps: new PromoStandardsClient(ACME, login, { fetch: fake.fetch }), calls: fake.calls };
+  };
+
+  it("is a supported config", () => {
+    expect(checkSupplierConfig(ACME)).toEqual([]);
+    expect(checkSupplierConfig({ ...ACME, endpoints: { shipments: { version: "2.1.0", url: "https://x.example" } } })).toEqual(["shipments 2.1.0 isn't supported (supported: 1.0.0, 2.0.0)"]);
+  });
+
+  it("asks by PO with the 2.0.0 namespace, every field a shared object as the schema has it", async () => {
+    const { ps, calls } = acme(fixture("promostandards/shipments-2.0.0.xml"));
+    await ps.getShipments({ poNumber: "PO2001" });
+    const call = calls[0]!;
+    expect(call.url).toBe("https://ps.acme.example/osn2");
+    expect(call.soapAction).toBe("getOrderShipmentNotification");
+    expect(call.xml).toContain('xmlns:ns="http://www.promostandards.org/WSDL/OrderShipmentNotificationService/2.0.0/"');
+    expect(call.xml).toContain('xmlns:shar="http://www.promostandards.org/WSDL/OrderShipmentNotificationService/2.0.0/SharedObjects/"');
+    expect(call.xml).toContain("<ns:GetOrderShipmentNotificationRequest>");
+    expect(call.xml).toContain("<shar:wsVersion>2.0.0</shar:wsVersion><shar:id>webuser</shar:id><shar:password>s3cret&amp;&lt;</shar:password><shar:queryType>1</shar:queryType><shar:referenceNumber>PO2001</shar:referenceNumber>");
+    expect(call.xml).not.toContain("<ns:queryType>");
+  });
+
+  it("asks by sales order and since a time (`shipmentDateTimestamp`, 2.0.0's spelling)", async () => {
+    const { ps, calls } = acme(fixture("promostandards/shipments-2.0.0.xml"));
+    await ps.getShipments({ salesOrderNumber: "SO-100" });
+    await ps.getShipments({ since: "2026-11-20T00:00:00" });
+    expect(calls.map((c) => elementsOf(c.xml, "queryType")[0])).toEqual(["2", "3"]);
+    expect(calls[0]!.xml).toContain("<shar:referenceNumber>SO-100</shar:referenceNumber>");
+    expect(calls[1]!.xml).toContain("<shar:shipmentDateTimestamp>2026-11-20T00:00:00</shar:shipmentDateTimestamp>");
+    expect(calls[1]!.xml).not.toContain("referenceNumber");
+  });
+
+  it("reads several packages and items, addresses, weight, dimensions and freight; a partial pickup shipment", async () => {
+    const shipments = await acme(fixture("promostandards/shipments-2.0.0.xml")).ps.getShipments({ poNumber: "PO2001" });
+    const dc = { address1: "100 Warehouse Way", city: "Irving", region: "TX", postalCode: "75038" };
+    expect(shipments).toEqual([
+      {
+        purchaseOrderNumber: "PO2001",
+        salesOrderNumber: "SO-100",
+        complete: true,
+        packages: [
+          {
+            trackingNumber: "1Z999AA10123456784",
+            carrier: "UPS",
+            method: "Ground",
+            shippedOn: "2026-11-20",
+            items: [
+              { productId: "PC54", partId: "538612", quantity: 24, uom: "EA", lineNumber: "1" },
+              { productId: "PC54", partId: "538613", quantity: 12, uom: "EA", lineNumber: "2" },
+            ],
+            shipFrom: { ...dc, companyName: "Acme Promo DC", country: "US" },
+            shipTo: { attentionTo: "Receiving", companyName: "Ink Shop", address1: "12 Main St", address2: "Suite 4", city: "Jacksonville", region: "FL", postalCode: "32218", country: "US", phone: "904-555-0100" },
+            destinationType: "Commercial",
+            customerPickup: false,
+            weight: { value: 14.2, uom: "Pounds" },
+            dimensions: { uom: "Inches", length: 18, width: 12, height: 10.5 },
+            shippingAccount: "A1B2C3",
+            shipmentTerms: "Prepaid",
+          },
+          {
+            trackingNumber: "1Z999AA10123456785",
+            carrier: "UPS",
+            method: "Ground",
+            shippedOn: "2026-11-20",
+            items: [{ productId: "K420", partId: "92032", quantity: 6, uom: "EA" }],
+            shipFrom: { ...dc, companyName: "Acme Promo DC", country: "US" },
+            shipTo: expect.objectContaining({ address1: "12 Main St" }),
+            destinationType: "Commercial",
+            customerPickup: false,
+          },
+        ],
+      },
+      {
+        purchaseOrderNumber: "PO2001",
+        salesOrderNumber: "SO-101",
+        complete: false,
+        packages: [{ trackingNumber: "", carrier: undefined, method: undefined, shippedOn: "2026-11-21", items: [{ productId: "ST860", partId: "1019704", quantity: 2, uom: "DZ", lineNumber: "3" }], shipFrom: dc, shipTo: dc, customerPickup: true }],
+      },
+    ]);
+    // Left out, not empty, when the supplier doesn't say.
+    expect(Object.keys(shipments[0]!.packages[1]!)).not.toContain("weight");
+    expect(Object.keys(shipments[1]!.packages[0]!)).not.toContain("destinationType");
+  });
+
+  it("nothing shipped yet (301) is no shipments; a refused login throws auth", async () => {
+    expect(await acme(fixture("promostandards/error-301-osn-2.0.0.xml")).ps.getShipments({ poNumber: "X" })).toEqual([]);
+    const refused = fixture("promostandards/error-105.xml").replaceAll("GetOrderStatusResponse", "GetOrderShipmentNotificationResponse");
+    await expect(acme(refused).ps.getShipments({ poNumber: "X" })).rejects.toMatchObject({ kind: "auth", code: "105", supplier: "acme" });
+  });
+
+  it("an empty answer is no shipments", async () => {
+    const empty = `<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body><ns2:GetOrderShipmentNotificationResponse xmlns:ns2="http://www.promostandards.org/WSDL/OrderShipmentNotificationService/2.0.0/"></ns2:GetOrderShipmentNotificationResponse></S:Body></S:Envelope>`;
+    expect(await acme(empty).ps.getShipments({ since: "2026-11-20T00:00:00" })).toEqual([]);
+  });
+});
+
 describe("Invoice 1.0.0", () => {
   it("asks SanMar's V1_0_0 binding and reads the invoice, handling and sales orders included", async () => {
     const { ps, calls } = client({ GetInvoicesRequest: fixture("promostandards/invoices-1.0.0.xml") });
