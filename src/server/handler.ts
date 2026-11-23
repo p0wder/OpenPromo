@@ -76,6 +76,9 @@ function matchRoute(pattern: string, rest: readonly string[]): Record<string, st
   return params;
 }
 
+/** Whether a supplier has a route that places orders (OPENPROMO_ORDERS still decides whether this server lets it). */
+export const takesOrders = (def: SupplierDef) => (def.driver.routes ?? []).some((r) => r.write);
+
 /** What the supplier list says about one supplier: never a login, only which headers carry one. */
 export function describeSupplier(def: SupplierDef, config: Pick<ServerConfig, "orders">, detail = false) {
   const { driver } = def;
@@ -132,9 +135,12 @@ export function createHandler(config: ServerConfig, opts: HandlerOptions = {}): 
         const words = (url.searchParams.get("search") ?? "").toLowerCase().split(/\s+/).filter(Boolean);
         const capability = url.searchParams.get("capability");
         const kind = url.searchParams.get("kind");
-        if (capability && !(CAPABILITIES as readonly string[]).includes(capability)) throw new OpenPromoError("invalid", `capability must be one of ${CAPABILITIES.join(", ")}.`);
+        // `orders` isn't a capability (capabilities drive the shared GET routes): it means the supplier has a write route
+        // (SanMar's and S&S's own, or `orders` for a PromoStandards supplier listing PO 1.0.0), whether or not this server allows it.
+        if (capability && capability !== "orders" && !(CAPABILITIES as readonly string[]).includes(capability)) throw new OpenPromoError("invalid", `capability must be one of ${CAPABILITIES.join(", ")}, orders.`);
+        const matches = (s: SupplierDef) => (capability === "orders" ? takesOrders(s) : s.driver.capabilities.includes(capability as Capability));
         const list = [...config.suppliers.values()].filter(
-          (s) => (!words.length || words.every((w) => `${s.id} ${s.name}`.toLowerCase().includes(w))) && (!capability || s.driver.capabilities.includes(capability as Capability)) && (!kind || s.driver.kind === kind),
+          (s) => (!words.length || words.every((w) => `${s.id} ${s.name}`.toLowerCase().includes(w))) && (!capability || matches(s)) && (!kind || s.driver.kind === kind),
         );
         return json(200, { count: list.length, suppliers: list.map((s) => describeSupplier(s, config)) });
       }

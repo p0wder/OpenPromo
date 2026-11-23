@@ -32,7 +32,7 @@ describe("the directory as shipped", () => {
 
 describe("syncing from PromoStandards' repository", () => {
   it("reads service names long and short", () => {
-    expect(["Product Data", "PDS", "Inventory", "INV", "Product Pricing and Configuration", "PPC", "Order Status", "ODRSTAT", "Order Shipment Notification", "OSN", "Invoice", "INVC", "Media Content", "Purchase Order"].map(serviceKey)).toEqual([
+    expect(["Product Data", "PDS", "Inventory", "INV", "Product Pricing and Configuration", "PPC", "Order Status", "ODRSTAT", "Order Shipment Notification", "OSN", "Invoice", "INVC", "Media Content", "Purchase Order", "PO", "Company Data"].map(serviceKey)).toEqual([
       "productData",
       "productData",
       "inventory",
@@ -46,6 +46,8 @@ describe("syncing from PromoStandards' repository", () => {
       "invoices",
       "invoices",
       "media",
+      "purchaseOrder",
+      "purchaseOrder",
       null,
     ]);
     expect(serviceKey("MED")).toBe("media");
@@ -64,7 +66,13 @@ describe("syncing from PromoStandards' repository", () => {
 
   it("SanMar's own listing gives exactly the endpoints OpenPromo's SanMar driver uses", () => {
     const { listings } = listingsFromRepository([{ code: "SanMar", name: "SanMar", type: "Supplier" }], new Map([["SanMar", readEndpoints(JSON.parse(fixture("promostandards-repository/sanmar-endpoints.json")))]]));
-    expect(listings[0]!.endpoints).toEqual(SANMAR_PROMOSTANDARDS.endpoints);
+    // SanMar lists Purchase Order 1.0.0. SANMAR_PROMOSTANDARDS gains it separately (SanMar orders through its own PO
+    // service, not this route), so it's checked on its own: it must be SanMar's, or not there yet.
+    const { purchaseOrder, ...rest } = listings[0]!.endpoints;
+    const { purchaseOrder: driverPO, ...driverRest } = SANMAR_PROMOSTANDARDS.endpoints;
+    expect(rest).toEqual(driverRest);
+    expect(purchaseOrder).toEqual({ version: "1.0.0", url: "https://ws.sanmar.com:8080/promostandards/POServiceBinding", testUrl: "https://edev-ws.sanmar.com:8080/promostandards/POServiceBinding" });
+    if (driverPO) expect(driverPO).toEqual(purchaseOrder);
   });
 
   it("keeps the highest version OpenPromo talks, live suppliers only; reports everything it leaves out", () => {
