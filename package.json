@@ -1,7 +1,7 @@
 {
   "name": "openpromo",
-  "version": "0.1.0",
-  "description": "Free, self-hosted REST API and TypeScript library for PromoStandards and SanMar web services.",
+  "version": "0.2.0",
+  "description": "Free, self-hosted REST API and TypeScript library for supplier web services: PromoStandards, SanMar and S&S Activewear, one shape for every supplier.",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -9,12 +9,14 @@
     "url": "https://github.com/p0wder/OpenPromo.git"
   },
   "keywords": [
+    "apparel",
     "promostandards",
+    "promotional products",
+    "rest",
+    "s&s activewear",
     "sanmar",
     "soap",
-    "rest",
-    "apparel",
-    "promotional products"
+    "ssactivewear"
   ],
   "engines": {
     "node": ">=20"
@@ -44,7 +46,8 @@
     "prepare": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "start": "node dist/server/node.js"
+    "start": "node dist/server/node.js",
+    "directory:sync": "pnpm build && node scripts/sync-directory.mjs"
   },
   "dependencies": {
     "fast-xml-parser": "^5.0.0"

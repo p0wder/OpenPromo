@@ -1,0 +1,31 @@
+name: Directory sync
+# Weekly: rebuild the supplier directory from PromoStandards' endpoint
+# directory and open a pull request when it changed, so new suppliers and
+# moved endpoints arrive as a reviewable diff.
+on:
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm directory:sync 2> sync-report.txt; cat sync-report.txt
+      - run: pnpm typecheck && pnpm test
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: directory-sync
+          title: "Directory: sync with PromoStandards"
+          commit-message: "Directory: sync with PromoStandards"
+          body-path: sync-report.txt
+          add-paths: src/directory/data.ts
