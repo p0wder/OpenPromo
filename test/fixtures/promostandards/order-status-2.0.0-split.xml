@@ -1,0 +1,25 @@
+<!-- source: built from the GetOrderStatusResponse field table, SanMar guide v24.7 p88 (one PO split into two sales orders: one partially shipped and on backorder, one complete) -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:GetOrderStatusResponse xmlns:ns2="http://www.promostandards.org/WSDL/OrderStatus/2.0.0/" xmlns="http://www.promostandards.org/WSDL/OrderStatus/2.0.0/SharedObjects/">
+ <OrderStatusArray><OrderStatus>
+  <purchaseOrderNumber>1042-1</purchaseOrderNumber>
+  <OrderStatusDetailArray>
+   <OrderStatusDetail>
+    <salesOrderNumber>100300001</salesOrderNumber>
+    <status>Partially Shipped</status>
+    <issueCategory>backOrderHold</issueCategory>
+    <ProductArray>
+     <Product><productId>PC54</productId><partId>118032</partId><QuantityOrdered><value>12</value><uom>EA</uom></QuantityOrdered><QuantityShipped><value>12</value><uom>EA</uom></QuantityShipped><status>Shipped</status></Product>
+     <Product><productId>PC54</productId><partId>118036</partId><QuantityOrdered><value>6</value><uom>EA</uom></QuantityOrdered><QuantityShipped><value>0</value><uom>EA</uom></QuantityShipped><status>Received</status></Product>
+    </ProductArray>
+    <IssueArray><Issue><issueStatus>Open</issueStatus><issueCategory>backOrderHold</issueCategory><productId>PC54</productId><partId>118036</partId></Issue></IssueArray>
+    <validTimestamp>2026-11-10T09:00:00-08:00</validTimestamp>
+   </OrderStatusDetail>
+   <OrderStatusDetail>
+    <salesOrderNumber>100300002</salesOrderNumber>
+    <status>Complete</status>
+    <validTimestamp>2026-11-11T09:00:00-08:00</validTimestamp>
+   </OrderStatusDetail>
+  </OrderStatusDetailArray>
+ </OrderStatus></OrderStatusArray>
+</ns2:GetOrderStatusResponse></S:Body></S:Envelope>

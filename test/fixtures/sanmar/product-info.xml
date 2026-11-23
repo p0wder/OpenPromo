@@ -1,0 +1,16 @@
+<!-- source: SanMar Web Services Integration Guide v24.7 p28-29 (getProductInfoByStyleColorSizeResponse), with a second size added in the same shape -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:getProductInfoByStyleColorSizeResponse xmlns:ns2="http://impl.webservice.integration.sanmar.com/"><return>
+ <errorOccured>false</errorOccured>
+ <listResponse>
+  <productBasicInfo><availableSizes>Adult Sizes: S-6XL</availableSizes><brandName>Port &amp; Co</brandName><caseSize>72</caseSize><catalogColor>White</catalogColor><color>White</color><inventoryKey>11803</inventoryKey><pieceWeight>0.38</pieceWeight><productDescription>A year-round essential.</productDescription><productStatus>Active</productStatus><productTitle>Port &amp; Co - Essential Tee. PC61</productTitle><size>S</size><sizeIndex>2</sizeIndex><style>PC61</style><uniqueKey>118032</uniqueKey><category>T-Shirts</category></productBasicInfo>
+  <productImageInfo><colorProductImage>https://cdnm.sanmar.com/catalog/images/imglib/catl/2016/f17/PC61_white_model_front_102016.jpg</colorProductImage><colorSquareImage>https://cdnm.sanmar.com/swatch/gifs/port_white.gif</colorSquareImage><colorSwatchImage>https://cdnm.sanmar.com/catalog/images/PC61sw.jpg</colorSwatchImage><frontModel>https://cdnm.sanmar.com/imglib/mresjpg/2016/f17/PC61_white_model_front_102016.jpg</frontModel><backModel>https://cdnm.sanmar.com/imglib/mresjpg/2016/f17/PC61_white_model_back_102016.jpg</backModel><frontFlat>https://cdnm.sanmar.com/imglib/mresjpg/2012/f1/PC61_White_Flat_Front_2009.jpg</frontFlat></productImageInfo>
+  <productPriceInfo><casePrice>2.84</casePrice><caseSalePrice>2.38</caseSalePrice><dozenPrice>3.84</dozenPrice><piecePrice>3.84</piecePrice><pieceSalePrice>2.38</pieceSalePrice><priceCode>A/P</priceCode><priceText>Price applies to sizes S-XL</priceText><mapPrice>2.38</mapPrice><saleEndDate>2023-05-06</saleEndDate><saleStartDate>2023-05-01</saleStartDate></productPriceInfo>
+ </listResponse>
+ <listResponse>
+  <productBasicInfo><brandName>Port &amp; Co</brandName><catalogColor>Athletic Hthr</catalogColor><color>Athletic Heather</color><inventoryKey>11805</inventoryKey><productTitle>Port &amp; Co - Essential Tee. PC61</productTitle><size>2XL</size><sizeIndex>6</sizeIndex><style>PC61</style><uniqueKey>118056</uniqueKey><category>T-Shirts</category></productBasicInfo>
+  <productImageInfo><colorSwatchImage>https://cdnm.sanmar.com/catalog/images/PC61sw.jpg</colorSwatchImage></productImageInfo>
+  <productPriceInfo><casePrice>4.84</casePrice><piecePrice>5.84</piecePrice></productPriceInfo>
+ </listResponse>
+ <message>Product Info sent successfully.</message>
+</return></ns2:getProductInfoByStyleColorSizeResponse></S:Body></S:Envelope>

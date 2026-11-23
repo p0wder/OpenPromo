@@ -1,0 +1,3 @@
+<!-- source: built from SanMar Standard Web Service Errors, guide v24.7 p7 and p11 ("User authentication failed.") -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:getProductInfoByStyleColorSizeResponse xmlns:ns2="http://impl.webservice.integration.sanmar.com/"><return><errorOccured>true</errorOccured><message>ERROR: User authenticating failed</message></return></ns2:getProductInfoByStyleColorSizeResponse></S:Body></S:Envelope>

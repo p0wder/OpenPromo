@@ -1,0 +1,7 @@
+<!-- source: SanMar Web Services Integration Guide v24.7 p70 (getPricingResponse) -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:getPricingResponse xmlns:ns2="http://impl.webservice.integration.sanmar.com/"><return>
+ <errorOccurred>false</errorOccurred>
+ <listResponse><casePrice>2.59</casePrice><color>lime</color><dozenPrice>3.59</dozenPrice><inventoryKey>46389</inventoryKey><myPrice>1.76</myPrice><piecePrice>3.59</piecePrice><salePrice>1.99</salePrice><size>m</size><sizeIndex>3</sizeIndex><style>lpc61</style><saleStartDate>2017-06-26</saleStartDate><saleEndDate>2017-07-02</saleEndDate><incentivePrice>1.76</incentivePrice></listResponse>
+ <message>Pricing returned successfully</message>
+</return></ns2:getPricingResponse></S:Body></S:Envelope>

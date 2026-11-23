@@ -1,0 +1,11 @@
+<!-- source: SanMar Web Services Integration Guide v24.7 p120-121 (GetInvoicesResponse) -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:GetInvoicesResponse xmlns="http://www.promostandards.org/WSDL/Invoice/1.0.0/SharedObjects/" xmlns:ns2="http://www.promostandards.org/WSDL/Invoice/1.0.0/">
+ <ns2:InvoiceArray><ns2:Invoice>
+  <invoiceNumber>123456798</invoiceNumber><invoiceType>Invoice</invoiceType><invoiceDate>2021-03-24</invoiceDate><purchaseOrderNumber>112233445</purchaseOrderNumber>
+  <ns2:BillTo><AccountInfo><accountName>TestAccount</accountName><accountNumber>12345</accountNumber></AccountInfo></ns2:BillTo>
+  <paymentDueDate>2021-04-24</paymentDueDate><currency>USD</currency><salesAmount>15.67</salesAmount><shippingAmount>0.0</shippingAmount><handlingAmount>0.0</handlingAmount><taxAmount>0.00</taxAmount><invoiceAmount>15.67</invoiceAmount><advancePaymentAmount>0.00</advancePaymentAmount><invoiceAmountDue>15.67</invoiceAmountDue>
+  <ns2:InvoiceLineItemsArray><InvoiceLineItem><productId>ST860</productId><partId>1019704</partId><invoiceQuantity>1</invoiceQuantity><quantityUOM>EA</quantityUOM><lineItemDescription>ST Sport-Wick Textured 1/4-Zip Pullover</lineItemDescription><unitPrice>15.67</unitPrice><extendedPrice>15.67</extendedPrice></InvoiceLineItem></ns2:InvoiceLineItemsArray>
+  <ns2:SalesOrderNumbersArray><salesOrderNumber>12345123</salesOrderNumber></ns2:SalesOrderNumbersArray>
+ </ns2:Invoice></ns2:InvoiceArray>
+</ns2:GetInvoicesResponse></S:Body></S:Envelope>

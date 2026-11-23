@@ -1,0 +1,3 @@
+<!-- source: built from SanMar Standard Web Service Errors, guide v24.7 p11 ("Invalid Style + Color + Size specified."), in the return shape of p28 -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:getProductInfoByStyleColorSizeResponse xmlns:ns2="http://impl.webservice.integration.sanmar.com/"><return><errorOccured>true</errorOccured><message>Invalid Style + Color + Size specified.</message></return></ns2:getProductInfoByStyleColorSizeResponse></S:Body></S:Envelope>

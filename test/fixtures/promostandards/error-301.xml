@@ -1,0 +1,5 @@
+<!-- source: built from the PromoStandards error codes table, SanMar guide v24.7 p12 (301: PO not found, not shipped and invoiced yet), in the ServiceMessageArray shape of p92 -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:GetInvoicesResponse xmlns:ns2="http://www.promostandards.org/WSDL/Invoice/1.0.0/" xmlns="http://www.promostandards.org/WSDL/Invoice/1.0.0/SharedObjects/">
+ <ServiceMessageArray><ServiceMessage><code>301</code><description>Reference Number not found</description><severity>Error</severity></ServiceMessage></ServiceMessageArray>
+</ns2:GetInvoicesResponse></S:Body></S:Envelope>

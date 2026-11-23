@@ -1,0 +1,5 @@
+<!-- source: built from the PromoStandards error codes table, SanMar guide v24.7 p12 (105: authentication credentials failed) -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:GetOrderStatusResponse xmlns:ns2="http://www.promostandards.org/WSDL/OrderStatus/2.0.0/" xmlns="http://www.promostandards.org/WSDL/OrderStatus/2.0.0/SharedObjects/">
+ <ServiceMessageArray><ServiceMessage><code>105</code><description>Authentication Credentials failed</description><severity>Error</severity></ServiceMessage></ServiceMessageArray>
+</ns2:GetOrderStatusResponse></S:Body></S:Envelope>

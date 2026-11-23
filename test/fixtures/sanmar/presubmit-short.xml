@@ -1,0 +1,8 @@
+<!-- source: SanMar Purchase Order Integration Guide v24.6 p25 (getPreSubmitInfoResponse, inventory not available) -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:getPreSubmitInfoResponse xmlns:ns2="http://webservice.integration.sanmar.com/"><return>
+ <errorOccurred>true</errorOccurred><message>Requested Quantity is not in stock from any warehouse or from the requested warehouse for the following styles: [(K420,900)]</message>
+ <response><internalMessage>Requested Quantity is not in stock from any warehouse or from the requested warehouse for the following styles: [(K420,900)]</internalMessage><poNum>WEBSERVICES-TEST</poNum><residence>N</residence><shipMethod>UPS</shipMethod><shipState>WA</shipState><shipZip>98029</shipZip>
+  <webServicePoDetailList><color>Black</color><errorOccured>true</errorOccured><inventoryKey>9203</inventoryKey><quantity>900</quantity><size>S</size><message>Requested Quantity is not in stock from any warehouse or from requested warehouse</message><sizeIndex>2</sizeIndex><style>K420</style></webServicePoDetailList>
+ </response>
+</return></ns2:getPreSubmitInfoResponse></S:Body></S:Envelope>

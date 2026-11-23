@@ -1,0 +1,11 @@
+<!-- source: SanMar Web Services Integration Guide v24.7 p74 (GetConfigurationAndPricingResponse) -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:GetConfigurationAndPricingResponse xmlns:ns2="http://www.promostandards.org/WSDL/PricingAndConfiguration/1.0.0/" xmlns="http://www.promostandards.org/WSDL/PricingAndConfiguration/1.0.0/SharedObjects/">
+ <ns2:Configuration>
+  <ns2:PartArray><ns2:Part><partId>240831</partId>
+   <ns2:PartPriceArray><ns2:PartPrice><ns2:minQuantity>1</ns2:minQuantity><ns2:price>8.99</ns2:price><ns2:priceUom>CA</ns2:priceUom><ns2:priceEffectiveDate>2023-05-19T12:51:32.780</ns2:priceEffectiveDate><ns2:priceExpiryDate>2023-05-19T23:59:59.000</ns2:priceExpiryDate></ns2:PartPrice></ns2:PartPriceArray>
+   <partGroup>1</partGroup><partGroupRequired>false</partGroupRequired><partGroupDescription>NA</partGroupDescription><ratio>1</ratio><defaultPart>false</defaultPart>
+  </ns2:Part></ns2:PartArray>
+  <productId>K500</productId><currency>USD</currency><FobArray><Fob><fobId>6</fobId><fobPostalCode>32219</fobPostalCode></Fob></FobArray><priceType>Net</priceType>
+ </ns2:Configuration>
+</ns2:GetConfigurationAndPricingResponse></S:Body></S:Envelope>

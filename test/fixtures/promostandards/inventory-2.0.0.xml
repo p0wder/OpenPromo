@@ -1,0 +1,12 @@
+<!-- source: SanMar Web Services Integration Guide v24.7 p62-66 (GetInventoryLevelsResponse), first two locations kept -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:GetInventoryLevelsResponse xmlns:ns2="http://www.promostandards.org/WSDL/Inventory/2.0.0/" xmlns="http://www.promostandards.org/WSDL/Inventory/2.0.0/SharedObjects/">
+ <Inventory><productId>k420</productId><PartInventoryArray><PartInventory>
+  <partId>92032</partId><mainPart>false</mainPart><partColor>Black</partColor><labelSize>S</labelSize><partDescription>Port Authority Heavyweight Cotton Pique Polo. K420</partDescription>
+  <quantityAvailable><Quantity><uom>EA</uom><value>1045</value></Quantity></quantityAvailable>
+  <InventoryLocationArray>
+   <InventoryLocation><inventoryLocationId>1</inventoryLocationId><inventoryLocationName>Seattle</inventoryLocationName><postalCode>98027</postalCode><country>US</country><inventoryLocationQuantity><Quantity><uom>EA</uom><value>0</value></Quantity></inventoryLocationQuantity></InventoryLocation>
+   <InventoryLocation><inventoryLocationId>2</inventoryLocationId><inventoryLocationName>Cincinnati</inventoryLocationName><postalCode>45069</postalCode><country>US</country><inventoryLocationQuantity><Quantity><uom>EA</uom><value>167</value></Quantity></inventoryLocationQuantity></InventoryLocation>
+  </InventoryLocationArray>
+ </PartInventory></PartInventoryArray></Inventory>
+</ns2:GetInventoryLevelsResponse></S:Body></S:Envelope>

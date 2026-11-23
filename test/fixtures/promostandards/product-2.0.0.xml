@@ -1,0 +1,21 @@
+<!-- source: SanMar Web Services Integration Guide v24.7 p35-38 (GetProductResponse), trimmed -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:GetProductResponse xmlns:ns2="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/" xmlns="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/SharedObjects/">
+ <ns2:Product>
+  <productId>MM1000</productId><productName>MERCER+METTLE Stretch Heavyweight Pique Polo MM1000</productName>
+  <description>Crafted in a heavier knit.</description><description>Moisture-wicking</description>
+  <ns2:ProductKeywordArray><ProductKeyword><keyword>Stretch</keyword></ProductKeyword><ProductKeyword><keyword>Pique</keyword></ProductKeyword></ns2:ProductKeywordArray>
+  <productBrand>Mercer+Mettle</productBrand>
+  <ns2:ProductCategoryArray><ProductCategory><category>Polos/Knits</category><subCategory>Cotton, Easy Care</subCategory></ProductCategory></ns2:ProductCategoryArray>
+  <primaryImageUrl>https://cdnm.sanmar.com/catalog/images/MM1000.jpg</primaryImageUrl>
+  <ns2:ProductPriceGroupArray><ProductPriceGroup><ProductPriceArray><ProductPrice><quantityMin>1</quantityMin><quantityMax>2147483647</quantityMax><price>24.98</price></ProductPrice></ProductPriceArray><groupName>MSRP</groupName><currency>USD</currency></ProductPriceGroup></ns2:ProductPriceGroupArray>
+  <ns2:ProductPartArray><ns2:ProductPart>
+   <partId>1878771</partId>
+   <ns2:primaryColor><Color><standardColorName>Deep Black</standardColorName><colorName>Insignia Blue</colorName></Color></ns2:primaryColor>
+   <ns2:ColorArray><Color><standardColorName>Deep Black</standardColorName><approximatePms>BLACK C</approximatePms><colorName>DeepBlack</colorName></Color></ns2:ColorArray>
+   <ApparelSize><apparelStyle>Mens</apparelStyle><labelSize>S</labelSize></ApparelSize>
+   <gtin>00191265938235</gtin><isCloseout>false</isCloseout>
+  </ns2:ProductPart></ns2:ProductPartArray>
+  <ns2:lastChangeDate>2023-04-20T16:35:43.653</ns2:lastChangeDate>
+ </ns2:Product>
+</ns2:GetProductResponse></S:Body></S:Envelope>

@@ -1,0 +1,8 @@
+<!-- source: SanMar Purchase Order Integration Guide v24.6 p24 (getPreSubmitInfoResponse, inventory available) -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:getPreSubmitInfoResponse xmlns:ns2="http://webservice.integration.sanmar.com/"><return>
+ <errorOccurred>false</errorOccurred><message>Information returned successfully</message>
+ <response><attention>SanMar Integrations</attention><internalMessage>SUCCESS: Inventory Found</internalMessage><poNum>WEBSERVICES TEST</poNum><residence>N</residence><shipMethod>UPS</shipMethod><shipState>WA</shipState><shipZip>98029</shipZip>
+  <webServicePoDetailList><color>white</color><errorOccured>false</errorOccured><inventoryKey>20860</inventoryKey><message>Requested Quantity is confirmed and available in warehouse '1' to ship to your destination.</message><quantity>5</quantity><size>m</size><sizeIndex>3</sizeIndex><style>K500</style><whseNo>1</whseNo></webServicePoDetailList>
+ </response>
+</return></ns2:getPreSubmitInfoResponse></S:Body></S:Envelope>

@@ -1,0 +1,3 @@
+<!-- source: built from SanMar Purchase Order Integration Guide v24.6 p27 (submitPO returns "Error: [error description]") -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns2:submitPOResponse xmlns:ns2="http://webservice.integration.sanmar.com/"><return><errorOccurred>true</errorOccurred><message>Error: Ship to state is invalid</message></return></ns2:submitPOResponse></S:Body></S:Envelope>

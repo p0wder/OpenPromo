@@ -1,0 +1,58 @@
+{
+  "name": "openpromo",
+  "version": "0.1.0",
+  "description": "Free, self-hosted REST API and TypeScript library for PromoStandards and SanMar web services.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/p0wder/OpenPromo.git"
+  },
+  "keywords": [
+    "promostandards",
+    "sanmar",
+    "soap",
+    "rest",
+    "apparel",
+    "promotional products"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    }
+  },
+  "bin": {
+    "openpromo": "./dist/server/node.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "start": "node dist/server/node.js"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "5.9.3",
+    "vitest": "^4.0.0"
+  },
+  "packageManager": "pnpm@10.28.0"
+}
