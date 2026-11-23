@@ -145,6 +145,7 @@ Services and versions OpenPromo talks (the `endpoints` key, then the versions):
 | Order Shipment Notification | `shipments` | 1.0.0, 2.0.0, 2.1.0 (2.x also gives each package's ship-from and ship-to addresses, weight, dimensions and freight terms) |
 | Invoice | `invoices` | 1.0.0 |
 | Media Content | `media` | 1.1.0 (pictures, documents and video; also gives which products' media changed) |
+| Purchase Order | `purchaseOrder` | 1.0.0 (Blank orders, in the library: see [Placing orders](#placing-orders)) |
 
 A config with a version it can't talk or a URL that isn't `https` is refused at start.
 
@@ -212,6 +213,8 @@ It removes commas from every field (SanMar's file delimiter), refuses fields ove
 
 Lines are S&S SKUs (the `partId`s of `GET /v1/ssactivewear/products/{styleId}`). Ship methods are S&S's codes (1 Ground, the default; 16 3 Day Select; 3 2nd Day Air; 2 Next Day Air; 6 Will call). S&S may split one PO across warehouses: each S&S order comes back in `orders`.
 
+**PromoStandards Purchase Order 1.0.0** (library only for now: `PromoStandardsClient.sendPurchaseOrder(order)`, and `buildPurchaseOrder(order)` to check one without sending). Blank orders only (undecorated goods); Sample, Simple and Configured orders aren't built. Every line carries the buyer's own `unitPrice` in cents: OpenPromo never looks a price up or guesses one, and a line without one is `invalid`. It checks every required field, length and code list in the PO 1.0.0 schema (PO number 64, address lines and company 35, city 30, region 3, postal code 10, ISO country and currency codes), totals each line and the order, merges identical lines, and fills in only the currency (USD), the ship-to country (US) and the order date (now), each said in `changes`. It sends once, never retried, and answers the supplier's `transactionId`. A service message with severity Error is the supplier's refusal (nothing placed); an answer with no `transactionId`, a 5xx or no answer at all is `bad_response` or `unreachable`, and the order may have gone through. `getSupportedOrderTypes()` says which order types a supplier takes.
+
 ## Be gentle with suppliers
 
 - **Order status and shipments:** a few calls a day per PO at most (SanMar asks for three, and none in the first two hours after placing it).
@@ -229,11 +232,12 @@ Every shape comes from the suppliers' published guides, and S&S's catalog calls 
 - **S&S's order fields.** Status words, tracking, invoice and line fields on `/v2/orders/{po}?lines=true`, the order post's answer, and the invoiced-between-dates parameters are named as we read S&S's docs.
 - **Order Shipment Notification 2.0.0 and 2.1.0.** The test fixtures are built from the official schemas, not from a supplier's live answer.
 - **Media Content 1.1.0.** The reader is tested against fixtures built from the official schema. None of the 508 directory suppliers that list it has been called yet. SanMar's and S&S's media come from the image fields Inkline already reads; the class types given to each view are OpenPromo's choice.
+- **Purchase Order 1.0.0.** Requests are checked against the official schema and the test fixtures are built from it; no supplier has been sent one yet, and each supplier's own PO guide may ask for more (a contact, a description, its own payment terms).
 - **S&S style lookups by name.** `/v2/styles/{identifier}` with a part number or "Brand Style" (numeric style ids are proven).
 
 ## Changes
 
-**Unreleased.** `OPENPROMO_ORDERS` is a list of the suppliers that may order (`on` still means SanMar and S&S). `orders_off` names the supplier. `GET /v1/suppliers/{id}` gives `ordersAllowed`. In the library, `ServerConfig.allowOrders` is now `orders` (a set of ids), checked with `mayOrder(config, id)`.
+**Unreleased.** `OPENPROMO_ORDERS` is a list of the suppliers that may order (`on` still means SanMar and S&S). `orders_off` names the supplier. `GET /v1/suppliers/{id}` gives `ordersAllowed`. In the library, `ServerConfig.allowOrders` is now `orders` (a set of ids), checked with `mayOrder(config, id)`. PromoStandards Purchase Order 1.0.0 for Blank orders in the library: `buildPurchaseOrder`, `PromoStandardsClient.sendPurchaseOrder` and `getSupportedOrderTypes`, with `purchaseOrder` as an `endpoints` key.
 
 **0.2.0.** One API for every supplier. S&S Activewear. The supplier directory and registry. `GET /v1/sanmar/products/{style}` now answers the shared `Product` (from SanMar's PromoStandards Product Data); SanMar's Product Info moved to `/v1/sanmar/native/product-info/{style}`, and `pricing` without `priceType` to `/v1/sanmar/native/pricing/{style}`. `/health` reports a count of suppliers, not their ids.
 

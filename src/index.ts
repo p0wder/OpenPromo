@@ -8,6 +8,7 @@ export * from "./errors.js";
 export * from "./soap.js";
 export * from "./promostandards/types.js";
 export * from "./promostandards/client.js";
+export * from "./promostandards/order.js";
 export * from "./sanmar/index.js";
 export * from "./sanmar/driver.js";
 export * from "./ssactivewear/index.js";

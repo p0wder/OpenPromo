@@ -1,0 +1,7 @@
+<!-- source: PO 1.0.0 schema (GetSupportedOrderTypesResponse.xsd and SharedObjectsPO.xsd's OrderTypeType, promostandards.org purchaseOrder-1.0.0-1.zip), not a live answer: supportedOrderTypes repeated in the service namespace; values made up -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns1:GetSupportedOrderTypesResponse xmlns:ns1="http://www.promostandards.org/WSDL/PO/1.0.0/" xmlns:ns2="http://www.promostandards.org/WSDL/PO/1.0.0/SharedObjects/">
+ <ns1:supportedOrderTypes>Blank</ns1:supportedOrderTypes>
+ <ns1:supportedOrderTypes>Sample</ns1:supportedOrderTypes>
+ <ns1:supportedOrderTypes>Configured</ns1:supportedOrderTypes>
+</ns1:GetSupportedOrderTypesResponse></S:Body></S:Envelope>

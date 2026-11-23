@@ -7,14 +7,16 @@
  *
  * Built: Product Data 2.0.0, Inventory 2.0.0, Pricing and Configuration
  * 1.0.0, Order Status 1.0.0 and 2.0.0, Order Shipment Notification 1.0.0,
- * 2.0.0 and 2.1.0, Invoice 1.0.0, Media Content 1.1.0. Request and response
+ * 2.0.0 and 2.1.0, Invoice 1.0.0, Media Content 1.1.0, Purchase Order 1.0.0
+ * (Blank orders, from the official schema: see `order.ts`). Request and response
  * shapes follow the PromoStandards schemas as SanMar's Web Services
  * Integration Guide v24.7 (Oct 2026) prints them (Order Shipment
  * Notification 2.0.0 and 2.1.0, Media Content 1.1.0: the official schemas);
  * each parser reads both the 1.x and 2.x spellings where they differ.
  */
 import { OpenPromoError, type OpenPromoErrorKind } from "../errors.js";
-import { asArray, node, soapRequest, text, type SoapBody, type XmlNode } from "../soap.js";
+import { asArray, DEFAULT_TIMEOUT_MS, node, sendSoap, soapRequest, text, type SoapBody, type SoapCall, type XmlNode } from "../soap.js";
+import { buildPurchaseOrder, PO_ORDER_TYPES, type PurchaseOrderInput, type PurchaseOrderPlaced, type PurchaseOrderType } from "./order.js";
 import type {
   Inventory,
   Invoice,
@@ -199,6 +201,11 @@ const SPECS: Record<PromoStandardsService, Record<string, ServiceSpec>> = {
       messageWords: MEDIA_MESSAGE_WORDS,
     },
   },
+  // PO 1.0.0 (POService.wsdl): `PO` is the request's one field in the service namespace; inside it,
+  // buildPurchaseOrder prefixes the service's own elements and leaves the shared objects to `shar:`.
+  purchaseOrder: {
+    "1.0.0": { namespace: (v) => `${PS}/PO/${v}/`, request: "SendPORequest", response: "SendPOResponse", soapAction: "sendPO", ownFields: ["PO"] },
+  },
 };
 
 /** Media Content's other operation. The WSDL's SOAP action is `urn:getMediaDateModified`, unlike getMediaContent's. */
@@ -209,6 +216,12 @@ const MEDIA_DATE_MODIFIED: ServiceSpec = {
   soapAction: "urn:getMediaDateModified",
   messageWords: MEDIA_MESSAGE_WORDS,
 };
+
+/** Purchase Order's other operation: wsVersion, id and password only. */
+const SUPPORTED_ORDER_TYPES: ServiceSpec = { namespace: (v) => `${PS}/PO/${v}/`, request: "GetSupportedOrderTypesRequest", response: "GetSupportedOrderTypesResponse", soapAction: "getSupportedOrderTypes" };
+
+/** The least time a sendPO is given to answer: a timeout leaves the order unknown, so it gets longer than a read. */
+const SEND_PO_TIMEOUT_MS = 45_000;
 
 const FOB_POINTS: ServiceSpec = { namespace: (v) => `${PS}/PricingAndConfiguration/${v}/`, request: "GetFobPointsRequest", response: "GetFobPointsResponse", soapAction: "getFobPoints" };
 
@@ -599,26 +612,35 @@ export class PromoStandardsClient {
     return { ep, spec, url };
   }
 
-  private async call(service: PromoStandardsService, fields: SoapBody, spec?: ServiceSpec): Promise<XmlNode> {
+  /** The SOAP call for a service's operation: wsVersion, id and password, then the fields (own fields as `ns:`). */
+  private soapCall(service: PromoStandardsService, fields: SoapBody, spec?: ServiceSpec): { call: SoapCall; use: ServiceSpec } {
     const target = this.endpoint(service);
     const use = spec ?? target.spec;
     const namespace = use.namespace(target.ep.version);
     const own = new Set(use.ownFields ?? []);
     const body: SoapBody = { wsVersion: target.ep.version, id: this.login.id, password: this.login.password };
     for (const [k, v] of Object.entries(fields)) body[own.has(k) ? `ns:${k}` : k] = v;
-    const answer = await soapRequest({
-      supplier: this.supplier.id,
-      url: target.url,
-      namespace,
-      operation: use.request,
-      prefix: "ns",
-      namespaces: { shar: `${namespace}SharedObjects/` },
-      childPrefix: "shar",
-      body,
-      soapAction: use.soapAction,
-      timeoutMs: this.supplier.timeoutMs,
-      fetch: this.options.fetch,
-    });
+    return {
+      use,
+      call: {
+        supplier: this.supplier.id,
+        url: target.url,
+        namespace,
+        operation: use.request,
+        prefix: "ns",
+        namespaces: { shar: `${namespace}SharedObjects/` },
+        childPrefix: "shar",
+        body,
+        soapAction: use.soapAction,
+        timeoutMs: this.supplier.timeoutMs,
+        fetch: this.options.fetch,
+      },
+    };
+  }
+
+  private async call(service: PromoStandardsService, fields: SoapBody, spec?: ServiceSpec): Promise<XmlNode> {
+    const { call, use } = this.soapCall(service, fields, spec);
+    const answer = await soapRequest(call);
     const raw = answer[use.response];
     const res = node(raw) ?? (raw === "" ? {} : undefined);
     if (!res) throw new OpenPromoError("bad_response", undefined, { supplier: this.supplier.id, detail: `no ${use.response} in the answer` });
@@ -786,5 +808,59 @@ export class PromoStandardsClient {
       if (e instanceof OpenPromoError && e.kind === "not_found") return [];
       throw e;
     }
+  }
+
+  /** Purchase Order (1.0.0) getSupportedOrderTypes: the order types the supplier takes (Blank, Sample, Simple, Configured), each once. */
+  async getSupportedOrderTypes(): Promise<PurchaseOrderType[]> {
+    const res = await this.call("purchaseOrder", {}, SUPPORTED_ORDER_TYPES);
+    const said = texts(res.supportedOrderTypes).map((t) => t.toLowerCase());
+    return PO_ORDER_TYPES.filter((t) => said.includes(t.toLowerCase()));
+  }
+
+  /**
+   * Purchase Order (1.0.0) sendPO: places a Blank order, once (never
+   * retried), and answers the supplier's `transactionId`. Throws `invalid`
+   * before sending (see `buildPurchaseOrder`); `auth`, `not_enabled`,
+   * `not_found`, `invalid`, `rate_limited` or `refused` when the supplier
+   * turned it down (nothing placed); `unreachable` or `bad_response` when the
+   * answer didn't clearly say either way: then the order may have gone
+   * through, so look the PO up (Order Status) before sending again. Check
+   * that ordering is allowed for the supplier before calling this.
+   */
+  async sendPurchaseOrder(order: PurchaseOrderInput): Promise<PurchaseOrderPlaced> {
+    const supplier = this.supplier.id;
+    const built = buildPurchaseOrder(order, { supplier });
+    const { call, use } = this.soapCall("purchaseOrder", { PO: built.request });
+    call.timeoutMs = Math.max(this.supplier.timeoutMs ?? DEFAULT_TIMEOUT_MS, SEND_PO_TIMEOUT_MS);
+    const unknown = (why: string) => `${this.supplier.name} ${why}, so the order may or may not have been placed. Look PO ${built.poNumber} up (Order Status) before sending it again.`;
+    let reply;
+    try {
+      reply = await sendSoap(call);
+    } catch (e) {
+      const detail = e instanceof OpenPromoError ? e.detail : (e as Error)?.message;
+      throw new OpenPromoError("unreachable", unknown("didn't answer"), { supplier, detail });
+    }
+    if (reply.fault) throw new OpenPromoError("refused", undefined, { supplier, detail: reply.fault.message, code: reply.fault.code, status: reply.status });
+    const raw = reply.body?.[use.response];
+    const res = node(raw) ?? (raw === "" ? {} : undefined);
+    if (!res) {
+      if (reply.status === 401 || reply.status === 403) throw new OpenPromoError("auth", `${this.supplier.name} rejected the login; the order wasn't placed.`, { supplier, status: reply.status });
+      if (reply.status === 429) throw new OpenPromoError("rate_limited", `${this.supplier.name} is busy (rate limit); the order wasn't placed.`, { supplier, status: 429 });
+      if (reply.status >= 500) throw new OpenPromoError("unreachable", unknown(`answered HTTP ${reply.status}`), { supplier, status: reply.status, detail: `HTTP ${reply.status}` });
+      throw new OpenPromoError("bad_response", unknown(`answered without a ${use.response}`), { supplier, status: reply.status, detail: `HTTP ${reply.status}: no ${use.response}` });
+    }
+    const messages = serviceMessages(res);
+    const errors = messages.filter((m) => /^error$/i.test(m.severity));
+    const transactionId = text(res.transactionId);
+    if (errors.length && transactionId) throw new OpenPromoError("bad_response", unknown(`answered both a transaction id (${transactionId}) and an error`), { supplier, status: reply.status, code: errors[0]!.code, detail: errors.map((m) => m.description || `code ${m.code}`).join("; ") });
+    if (errors.length) {
+      const first = this.messageError(errors[0]!)!;
+      // A service message is the supplier's clear answer: nothing was placed, so never a kind that means "unknown".
+      const kind = first.kind === "bad_response" || first.kind === "unreachable" || first.kind === "not_yet" ? "refused" : first.kind;
+      throw new OpenPromoError(kind, undefined, { supplier, status: reply.status, code: first.code, detail: errors.map((m) => m.description || `code ${m.code}`).join("; ") });
+    }
+    if (!transactionId) throw new OpenPromoError("bad_response", unknown("answered without a transaction id"), { supplier, status: reply.status });
+    if (!reply.ok) throw new OpenPromoError("bad_response", unknown(`answered HTTP ${reply.status} with a transaction id (${transactionId})`), { supplier, status: reply.status });
+    return { accepted: true, poNumber: built.poNumber, transactionId, total: built.total, messages, changes: built.changes };
   }
 }

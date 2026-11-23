@@ -24,6 +24,8 @@ const CAPABILITY_OF: Record<PromoStandardsService, readonly Capability[]> = {
   shipments: ["shipments"],
   invoices: ["invoices"],
   media: ["media", "mediaChanges"],
+  // Purchase Order places something real: no shared read capability. Its route is a write route (Story 17.3).
+  purchaseOrder: [],
 };
 
 /** Media Content's `classType` is a number: a class type's name is matched on the answer instead. */
