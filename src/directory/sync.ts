@@ -42,6 +42,7 @@ export function serviceKey(name: string): PromoStandardsService | null {
 export function supplierId(name: string): string {
   return name
     .toLowerCase()
+    .replace(/['\u2019]/g, "")
     .replace(/&/g, " and ")
     .replace(/\b(incorporated|inc|llc|l\.l\.c|ltd|limited|corp|corporation|co|company)\b\.?/g, " ")
     .replace(/[^a-z0-9]+/g, "-")
@@ -71,23 +72,30 @@ export interface RepositoryEndpoint {
   service: string;
   version: string;
   url: string;
-  /** "PROD" or "TEST" (or blank). */
-  environment: string;
+  testUrl: string;
+  /** "Production" for a live, certified service ("In Review" and others are left out). */
   status: string;
 }
 
-/** One company's endpoints list, read loosely. A service may be a nested object or flat fields. */
+/** An endpoint address without the `?wsdl` the repository lists it with. */
+export const serviceUrl = (url: string) => url.replace(/\?wsdl$/i, "");
+
+/**
+ * One company's endpoints list, read loosely. The repository nests the
+ * service: `{ Service: { ServiceType: { Code, Name }, Version, Status }, URL, TestURL }`.
+ * An answer that isn't a list (`{ success: false, message }`) has none.
+ */
 export function readEndpoints(json: unknown): RepositoryEndpoint[] {
   const list = Array.isArray(json) ? json : (pick(json, "endpoints", "Endpoints", "d") as unknown[]) ?? [];
   return (Array.isArray(list) ? list : []).map((e) => {
     const service = pick(e, "Service");
-    const nested = service && typeof service === "object";
+    const type = pick(service, "ServiceType");
     return {
-      service: str(nested ? pick(service, "Name", "ServiceName", "Code") : pick(e, "ServiceName", "Service", "ServiceCode")),
-      version: str(nested ? pick(service, "Version", "VersionNumber") : pick(e, "Version", "ServiceVersion", "VersionNumber")),
-      url: str(pick(e, "URL", "Url", "EndpointURL", "EndpointUrl")),
-      environment: str(pick(e, "Environment", "Env", "Type")).toUpperCase(),
-      status: str(pick(e, "Status", "EndpointStatus")),
+      service: str(pick(type, "Code") ?? pick(type, "Name") ?? pick(service, "Name", "Code") ?? pick(e, "ServiceName", "ServiceCode")),
+      version: str(pick(service, "Version") ?? pick(e, "Version")),
+      url: serviceUrl(str(pick(e, "URL", "Url", "EndpointURL"))),
+      testUrl: serviceUrl(str(pick(e, "TestURL", "TestUrl"))),
+      status: str(pick(service, "Status") ?? pick(e, "Status")),
     };
   });
 }
@@ -104,34 +112,33 @@ export interface SyncReport {
  * supports, its production URL (and test URL when listed). Ids are the
  * company name as a slug; a clash keeps the code appended.
  */
-export function listingsFromRepository(companies: readonly RepositoryCompany[], endpointsByCode: ReadonlyMap<string, readonly RepositoryEndpoint[]>): SyncReport {
+export function listingsFromRepository(companies: readonly RepositoryCompany[] | RepositoryCompany[], endpointsByCode: ReadonlyMap<string, readonly RepositoryEndpoint[]>): SyncReport {
   const skipped: string[] = [];
   const listings: PromoStandardsListing[] = [];
+  // The repository lists some companies twice under one code: keep the first.
+  const byCode = new Map<string, RepositoryCompany>();
+  for (const c of companies) if (!byCode.has(c.code)) byCode.set(c.code, c);
+  companies = [...byCode.values()];
   const ids = new Map<string, number>();
-  for (const c of companies) if (!/distributor/i.test(c.type)) ids.set(supplierId(c.name), (ids.get(supplierId(c.name)) ?? 0) + 1);
+  const isSupplier = (c: RepositoryCompany) => /^supplier$/i.test(c.type);
+  for (const c of companies) if (isSupplier(c)) ids.set(supplierId(c.name), (ids.get(supplierId(c.name)) ?? 0) + 1);
   for (const company of [...companies].sort((a, b) => a.name.localeCompare(b.name))) {
-    if (/distributor/i.test(company.type)) continue;
+    if (!isSupplier(company)) continue;
     const endpoints: Partial<Record<PromoStandardsService, PromoStandardsEndpoint>> = {};
     const byService = new Map<PromoStandardsService, RepositoryEndpoint[]>();
     for (const ep of endpointsByCode.get(company.code) ?? []) {
       const key = serviceKey(ep.service);
       const label = `${company.name}: ${ep.service} ${ep.version}`;
       if (!key) continue; // a service OpenPromo doesn't speak (Media, Purchase Order, …): not worth a line
-      if (/inactive|disabled|retired/i.test(ep.status)) skipped.push(`${label}: listed as ${ep.status}`);
+      if (ep.status && !/^production$/i.test(ep.status)) skipped.push(`${label}: listed as ${ep.status}`);
       else if (!SUPPORTED_VERSIONS[key].includes(ep.version)) skipped.push(`${label}: OpenPromo talks ${SUPPORTED_VERSIONS[key].join(", ")}`);
       else if (!/^https:\/\//i.test(ep.url)) skipped.push(`${label}: URL isn't https (${ep.url || "none"})`);
       else byService.set(key, [...(byService.get(key) ?? []), ep]);
     }
     for (const [key, eps] of byService) {
       const best = [...new Set(eps.map((e) => e.version))].sort(compareVersions).at(-1)!;
-      const at = eps.filter((e) => e.version === best);
-      const prod = at.find((e) => e.environment !== "TEST");
-      const test = at.find((e) => e.environment === "TEST");
-      if (!prod) {
-        skipped.push(`${company.name}: ${key} ${best}: only a test URL is listed`);
-        continue;
-      }
-      endpoints[key] = { version: best, url: prod.url, ...(test ? { testUrl: test.url } : {}) };
+      const ep = eps.find((e) => e.version === best)!;
+      endpoints[key] = { version: best, url: ep.url, ...(/^https:\/\//i.test(ep.testUrl) && ep.testUrl !== ep.url ? { testUrl: ep.testUrl } : {}) };
     }
     if (!Object.keys(endpoints).length) {
       skipped.push(`${company.name} (${company.code}): no service OpenPromo can talk`);

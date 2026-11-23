@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { checkSupplierConfig, DIRECTORY, NATIVE_DRIVERS, supplierDrivers } from "../src/index.js";
+import { checkSupplierConfig, DIRECTORY, NATIVE_DRIVERS, SANMAR_PROMOSTANDARDS, supplierDrivers } from "../src/index.js";
+import { fixture } from "./helpers.js";
 import { listingsFromRepository, readCompanies, readEndpoints, renderDirectoryData, serviceKey, supplierId } from "../src/directory/sync.js";
 import { DIRECTORY_OVERRIDES } from "../src/directory/overrides.js";
 
@@ -14,6 +15,14 @@ describe("the directory as shipped", () => {
     }
     expect(() => supplierDrivers()).not.toThrow();
     expect(supplierDrivers().filter((d) => native.has(d.id)).every((d) => d.kind === "native")).toBe(true);
+  });
+
+  it("is synced: hundreds of suppliers, and the ones that have their own driver aren't served twice", () => {
+    expect(DIRECTORY.length).toBeGreaterThan(400);
+    const ids = new Set(DIRECTORY.map((d) => d.id));
+    expect(ids.has("s-and-s-activewear")).toBe(false);
+    expect(supplierDrivers().find((d) => d.id === "sanmar")!.kind).toBe("native");
+    expect(supplierDrivers().filter((d) => d.id === "sanmar")).toHaveLength(1);
   });
 
   it("every hand-kept skip says why", () => {
@@ -42,51 +51,56 @@ describe("syncing from PromoStandards' repository", () => {
   });
 
   it("makes ids from company names", () => {
-    expect(["Alpha Broder, LLC", "Hit Promotional Products, Inc.", "Bic Graphic USA", "S&S Activewear"].map(supplierId)).toEqual(["alpha-broder", "hit-promotional-products", "bic-graphic-usa", "s-and-s-activewear"]);
+    expect(["Alpha Broder, LLC", "Hit Promotional Products, Inc.", "Bic Graphic USA", "S&S Activewear", "PCNA (Leed's, Bullet, Trimark)", "Tom\u2019s Caps"].map(supplierId)).toEqual(["alpha-broder", "hit-promotional-products", "bic-graphic-usa", "s-and-s-activewear", "pcna-leeds-bullet-trimark", "toms-caps"]);
   });
 
-  it("reads the repository's JSON loosely: either case, nested or flat services", () => {
+  it("reads the repository's endpoints as it answers them: nested service, both URLs on one entry, ?wsdl dropped", () => {
+    const sanmar = readEndpoints(JSON.parse(fixture("promostandards-repository/sanmar-endpoints.json")));
+    expect(sanmar).toContainEqual({ service: "Product", version: "2.0.0", url: "https://ws.sanmar.com:8080/promostandards/ProductDataServiceBindingV2", testUrl: "https://edev-ws.sanmar.com:8080/promostandards/ProductDataServiceBindingV2", status: "Production" });
+    expect(readEndpoints({ success: false, message: "Invalid company code" })).toEqual([]);
     expect(readCompanies([{ Code: "ACME", Name: "Acme Promo", Type: "Supplier" }, { code: "X" }])).toEqual([{ code: "ACME", name: "Acme Promo", type: "Supplier" }]);
-    expect(readEndpoints([{ Service: { Name: "Inventory", Version: "2.0.0" }, URL: "https://a/inv", Environment: "PROD", Status: "Active" }, { ServiceName: "OSN", Version: "1.0.0", url: "https://a/osn" }])).toEqual([
-      { service: "Inventory", version: "2.0.0", url: "https://a/inv", environment: "PROD", status: "Active" },
-      { service: "OSN", version: "1.0.0", url: "https://a/osn", environment: "", status: "" },
-    ]);
   });
 
-  it("keeps the highest version OpenPromo talks, with its test URL; reports everything it leaves out", () => {
+  it("SanMar's own listing gives exactly the endpoints OpenPromo's SanMar driver uses", () => {
+    const { listings } = listingsFromRepository([{ code: "SanMar", name: "SanMar", type: "Supplier" }], new Map([["SanMar", readEndpoints(JSON.parse(fixture("promostandards-repository/sanmar-endpoints.json")))]]));
+    expect(listings[0]!.endpoints).toEqual(SANMAR_PROMOSTANDARDS.endpoints);
+  });
+
+  it("keeps the highest version OpenPromo talks, live suppliers only; reports everything it leaves out", () => {
     const companies = [
       { code: "ACME", name: "Acme Promo, Inc.", type: "Supplier" },
       { code: "OLD", name: "Old Co", type: "Supplier" },
       { code: "DIST", name: "Some Distributor", type: "Distributor" },
+      { code: "SP", name: "Some Service Provider", type: "Service Provider" },
     ];
+    const ep = (service: string, version: string, url: string, extra: Partial<{ testUrl: string; status: string }> = {}) => ({ service, version, url, testUrl: "", status: "Production", ...extra });
     const endpoints = new Map([
       [
         "ACME",
         [
-          { service: "Order Status", version: "1.0.0", url: "https://acme.example/os1", environment: "PROD", status: "Active" },
-          { service: "Order Status", version: "2.0.0", url: "https://acme.example/os2", environment: "PROD", status: "Active" },
-          { service: "Order Status", version: "2.0.0", url: "https://test.acme.example/os2", environment: "TEST", status: "Active" },
-          { service: "Inventory", version: "1.2.1", url: "https://acme.example/inv", environment: "PROD", status: "Active" },
-          { service: "Invoice", version: "1.0.0", url: "http://acme.example/inv", environment: "PROD", status: "Active" },
-          { service: "Media Content", version: "1.1.0", url: "https://acme.example/media", environment: "PROD", status: "Active" },
+          ep("ODRSTAT", "1.0.0", "https://acme.example/os1"),
+          ep("ODRSTAT", "2.0.0", "https://acme.example/os2", { testUrl: "https://test.acme.example/os2" }),
+          ep("INV", "1.2.1", "https://acme.example/inv"),
+          ep("INVC", "1.0.0", "http://acme.example/invc"),
+          ep("MED", "1.1.0", "https://acme.example/media"),
         ],
       ],
-      ["OLD", [{ service: "Inventory", version: "2.0.0", url: "https://old.example/inv", environment: "PROD", status: "Inactive" }]],
+      ["OLD", [ep("INV", "2.0.0", "https://old.example/inv", { status: "In Review" })]],
+      ["SP", [ep("INV", "2.0.0", "https://sp.example/inv")]],
     ]);
     const { listings, skipped } = listingsFromRepository(companies, endpoints);
     expect(listings).toEqual([{ id: "acme-promo", name: "Acme Promo, Inc.", code: "ACME", endpoints: { orderStatus: { version: "2.0.0", url: "https://acme.example/os2", testUrl: "https://test.acme.example/os2" } } }]);
     expect(skipped).toEqual([
-      "Acme Promo, Inc.: Inventory 1.2.1: OpenPromo talks 2.0.0",
-      "Acme Promo, Inc.: Invoice 1.0.0: URL isn't https (http://acme.example/inv)",
-      "Old Co: Inventory 2.0.0: listed as Inactive",
+      "Acme Promo, Inc.: INV 1.2.1: OpenPromo talks 2.0.0",
+      "Acme Promo, Inc.: INVC 1.0.0: URL isn't https (http://acme.example/invc)",
+      "Old Co: INV 2.0.0: listed as In Review",
       "Old Co (OLD): no service OpenPromo can talk",
     ]);
-    // What it writes is valid TypeScript data the directory reads back.
     expect(renderDirectoryData(listings, "2026-11-23")).toContain('{"id":"acme-promo","name":"Acme Promo, Inc.","code":"ACME","endpoints":{"orderStatus":{"version":"2.0.0","url":"https://acme.example/os2","testUrl":"https://test.acme.example/os2"}}},');
   });
 
   it("two companies with the same name keep their codes apart", () => {
-    const ep = [{ service: "Inventory", version: "2.0.0", url: "https://x.example/inv", environment: "PROD", status: "" }];
+    const ep = [{ service: "INV", version: "2.0.0", url: "https://x.example/inv", testUrl: "", status: "Production" }];
     const { listings } = listingsFromRepository(
       [
         { code: "A1", name: "Acme", type: "Supplier" },
@@ -95,5 +109,8 @@ describe("syncing from PromoStandards' repository", () => {
       new Map([["A1", ep], ["A2", ep]]),
     );
     expect(listings.map((l) => l.id)).toEqual(["acme-a1", "acme-a2"]);
+    // The same company listed twice under one code is one supplier.
+    const twice = listingsFromRepository([{ code: "MG", name: "Magnet Guys", type: "Supplier" }, { code: "MG", name: "Magnet Guys", type: "Supplier" }], new Map([["MG", ep]]));
+    expect(twice.listings.map((l) => l.id)).toEqual(["magnet-guys"]);
   });
 });

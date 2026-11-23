@@ -108,7 +108,9 @@ describe("the API", () => {
       { id: "ssactivewear", name: "S&S Activewear", kind: "native", capabilities: ["product", "inventory", "pricing", "orderStatus", "shipments", "invoices"], loginHeaders: ["X-Supplier-Id", "X-Supplier-Password"], defaultLogin: false, environment: "production" },
     ]);
     expect(JSON.stringify(all.body)).not.toMatch(/webuser|188646/);
-    expect((await call("/v1/suppliers?search=s%26s")).body.suppliers.map((s: { id: string }) => s.id)).toEqual(["ssactivewear"]);
+    // S&S's own driver first; S&S Activewear's PromoStandards listing is skipped in favor of it.
+    expect((await call("/v1/suppliers?search=s%26s")).body.suppliers.map((s: { id: string }) => s.id)).toEqual(["ssactivewear", "s-and-s-canada"]);
+    expect((await call("/v1/suppliers?kind=promostandards&capability=invoices")).body.count).toBeGreaterThan(20);
     expect((await call("/v1/suppliers?capability=bogus")).status).toBe(400);
     const one = await call("/v1/suppliers/ssactivewear");
     expect(one.body).toMatchObject({ id: "ssactivewear", environments: ["production"], environmentHeader: "X-Supplier-Environment", login: [{ header: "X-Supplier-Id", label: "S&S account number" }, { header: "X-Supplier-Password", label: "S&S API key" }] });

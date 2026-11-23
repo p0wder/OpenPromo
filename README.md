@@ -144,7 +144,7 @@ The handler, the supplier list, the docs and the default-login env vars all come
 
 ## The directory
 
-`src/directory/data.ts` is generated from PromoStandards' own endpoint directory (its Web Service Repository) by `pnpm directory:sync`. For each supplier it keeps, per service, the highest version OpenPromo talks, with its test URL when one is listed. It prints everything it leaves out and why (a version OpenPromo doesn't talk, a URL that isn't https, a service listed inactive). A GitHub workflow runs it weekly and opens a pull request when anything changed. Hand fixes go in `src/directory/overrides.ts`, never in the generated file. A supplier with its own driver is never served from the directory.
+`src/directory/data.ts` is generated from PromoStandards' own endpoint directory (its Web Service Repository) by `pnpm directory:sync`. The last sync (2026-11-23) found 558 suppliers with 1,490 endpoints OpenPromo can talk, out of 1,040 suppliers listed. SanMar's listing gives exactly the endpoints its driver uses. For each supplier it keeps, per service, the highest version OpenPromo talks, with its test URL when one is listed. It prints everything it leaves out and why (a version OpenPromo doesn't talk, a URL that isn't https, a service listed inactive). The most common versions it can't use yet are Product Data 1.0.0 (479 endpoints) and Inventory 1.2.1 (132): supporting those is how most listed suppliers would gain stock and product data. A GitHub workflow runs it weekly and opens a pull request when anything changed. Hand fixes go in `src/directory/overrides.ts`, never in the generated file. A supplier with its own driver is never served from the directory.
 
 ## Use it as a library
 
@@ -207,11 +207,9 @@ OpenPromo never polls. What you call is what the supplier sees.
 
 Every shape comes from the suppliers' published guides, and S&S's catalog calls are the ones Inkline runs in production. These haven't been called with a real login yet. Run each once against your account and report anything that differs:
 
-- **SanMar Product Data address.** SanMar's guide gives two paths for Product Data: `ProductDataServiceBindingV2` in its example call, and `ProductDataServiceV2.xml` for the WSDL. OpenPromo uses the first.
 - **SanMar's wording for a disabled service.** The "not enabled" message for SanMar's own services isn't documented. OpenPromo reads anything mentioning "not enabled / not authorized" as `not_enabled`.
 - **S&S's order fields.** Status words, tracking, invoice and line fields on `/v2/orders/{po}?lines=true`, the order post's answer, and the invoiced-between-dates parameters are named as we read S&S's docs.
 - **S&S style lookups by name.** `/v2/styles/{identifier}` with a part number or "Brand Style" (numeric style ids are proven).
-- **The directory's JSON.** The sync reads PromoStandards' repository loosely; check its report on the first run.
 
 ## Changes
 

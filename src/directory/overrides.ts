@@ -7,5 +7,7 @@ import type { DirectoryOverrides } from "./index.js";
 export const DIRECTORY_OVERRIDES: DirectoryOverrides = {
   patch: {},
   add: [],
-  skip: {},
+  skip: {
+    "s-and-s-activewear": "Served by the ssactivewear driver (S&S's REST API v2), which answers everything this listing does and places orders.",
+  },
 };

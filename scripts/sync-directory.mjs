@@ -44,16 +44,20 @@ const keep = (name, json) => {
 
 const companiesJson = from ? read("companies.json") : await getJson(`${REPOSITORY}/companies`);
 keep("companies.json", companiesJson);
-const companies = readCompanies(companiesJson).filter((c) => !/distributor/i.test(c.type));
+// A code that isn't a plain identifier (PromoStandards lists a placeholder "**" with code "..") can't be asked about.
+const usable = (c) => !/^\.+$/.test(c.code) && !/[/\\]/.test(c.code);
+const listed = readCompanies(companiesJson).filter((c) => /^supplier$/i.test(c.type));
+for (const c of listed.filter((c) => !usable(c))) console.error(`  left out: "${c.name}" (code "${c.code}"): not a usable company code`);
+const companies = listed.filter(usable);
 console.error(`${companies.length} supplier companies listed`);
 
 const endpointsByCode = new Map();
 const failed = [];
 const queue = [...companies];
 await Promise.all(
-  Array.from({ length: 4 }, async () => {
+  Array.from({ length: 6 }, async () => {
     for (let c = queue.shift(); c; c = queue.shift()) {
-      const name = `endpoints/${c.code}.json`;
+      const name = `endpoints/${encodeURIComponent(c.code)}.json`;
       try {
         const json = from ? (existsSync(join(from, name)) ? read(name) : []) : await getJson(`${REPOSITORY}/companies/${encodeURIComponent(c.code)}/endpoints`);
         keep(name, json);
