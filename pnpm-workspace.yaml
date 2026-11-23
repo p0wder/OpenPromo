@@ -1,0 +1,5 @@
+# Its own workspace root, so that building it as a git dependency inside another
+# pnpm workspace (pnpm runs `prepare` in a temp folder there) installs only
+# OpenPromo and never climbs to the host workspace.
+packages:
+  - "."
