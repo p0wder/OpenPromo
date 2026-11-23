@@ -4,7 +4,7 @@
  * trimmed to YYYY-MM-DD where the field is a day).
  */
 
-export const PROMOSTANDARDS_SERVICES = ["productData", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media"] as const;
+export const PROMOSTANDARDS_SERVICES = ["productData", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media", "purchaseOrder"] as const;
 export type PromoStandardsService = (typeof PROMOSTANDARDS_SERVICES)[number];
 
 /* ---------------------------------------------------------------- Product Data */
