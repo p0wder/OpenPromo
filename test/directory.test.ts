@@ -45,9 +45,10 @@ describe("syncing from PromoStandards' repository", () => {
       "shipments",
       "invoices",
       "invoices",
-      null,
+      "media",
       null,
     ]);
+    expect(serviceKey("MED")).toBe("media");
   });
 
   it("makes ids from company names", () => {
@@ -63,7 +64,10 @@ describe("syncing from PromoStandards' repository", () => {
 
   it("SanMar's own listing gives exactly the endpoints OpenPromo's SanMar driver uses", () => {
     const { listings } = listingsFromRepository([{ code: "SanMar", name: "SanMar", type: "Supplier" }], new Map([["SanMar", readEndpoints(JSON.parse(fixture("promostandards-repository/sanmar-endpoints.json")))]]));
-    expect(listings[0]!.endpoints).toEqual(SANMAR_PROMOSTANDARDS.endpoints);
+    // SanMar's listing also offers Media Content 1.1.0, which its driver doesn't use yet (Story 16.2).
+    const { media, ...rest } = listings[0]!.endpoints;
+    expect(rest).toEqual(SANMAR_PROMOSTANDARDS.endpoints);
+    expect(media).toEqual({ version: "1.1.0", url: "https://ws.sanmar.com:8080/promostandards/MediaContentServiceBinding", testUrl: "https://edev-ws.sanmar.com:8080/promostandards/MediaContentServiceBinding" });
   });
 
   it("keeps the highest version OpenPromo talks, live suppliers only; reports everything it leaves out", () => {
@@ -89,14 +93,14 @@ describe("syncing from PromoStandards' repository", () => {
       ["SP", [ep("INV", "2.0.0", "https://sp.example/inv")]],
     ]);
     const { listings, skipped } = listingsFromRepository(companies, endpoints);
-    expect(listings).toEqual([{ id: "acme-promo", name: "Acme Promo, Inc.", code: "ACME", endpoints: { orderStatus: { version: "2.0.0", url: "https://acme.example/os2", testUrl: "https://test.acme.example/os2" } } }]);
+    expect(listings).toEqual([{ id: "acme-promo", name: "Acme Promo, Inc.", code: "ACME", endpoints: { orderStatus: { version: "2.0.0", url: "https://acme.example/os2", testUrl: "https://test.acme.example/os2" }, media: { version: "1.1.0", url: "https://acme.example/media" } } }]);
     expect(skipped).toEqual([
       "Acme Promo, Inc.: INV 1.2.1: OpenPromo talks 2.0.0",
       "Acme Promo, Inc.: INVC 1.0.0: URL isn't https (http://acme.example/invc)",
       "Old Co: INV 2.0.0: listed as In Review",
       "Old Co (OLD): no service OpenPromo can talk",
     ]);
-    expect(renderDirectoryData(listings, "2026-11-23")).toContain('{"id":"acme-promo","name":"Acme Promo, Inc.","code":"ACME","endpoints":{"orderStatus":{"version":"2.0.0","url":"https://acme.example/os2","testUrl":"https://test.acme.example/os2"}}},');
+    expect(renderDirectoryData(listings, "2026-11-23")).toContain('{"id":"acme-promo","name":"Acme Promo, Inc.","code":"ACME","endpoints":{"orderStatus":{"version":"2.0.0","url":"https://acme.example/os2","testUrl":"https://test.acme.example/os2"},"media":{"version":"1.1.0","url":"https://acme.example/media"}}},');
   });
 
   it("a supplier listing OSN 1.0.0, 2.0.0 and 2.1.0 ends up on 2.1.0, whatever order they're listed in", () => {

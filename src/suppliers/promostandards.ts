@@ -14,7 +14,8 @@ export interface PromoStandardsListing extends PromoStandardsSupplier {
   notes?: string;
 }
 
-const CAPABILITY_OF: Record<PromoStandardsService, Capability> = {
+/** The shared question each service answers. Media Content has none yet, so it adds no capability. */
+const CAPABILITY_OF: Partial<Record<PromoStandardsService, Capability>> = {
   productData: "product",
   inventory: "inventory",
   pricing: "pricing",
@@ -43,7 +44,7 @@ export function promoStandardsConnection(client: PromoStandardsClient): Supplier
 /** The shared questions a PromoStandards supplier answers: the services it lists at versions OpenPromo talks. */
 export function promoStandardsCapabilities(supplier: PromoStandardsSupplier): Capability[] {
   const probe = new PromoStandardsClient(supplier, { id: "", password: "" });
-  return (Object.keys(CAPABILITY_OF) as PromoStandardsService[]).filter((s) => probe.has(s)).map((s) => CAPABILITY_OF[s]);
+  return (Object.entries(CAPABILITY_OF) as [PromoStandardsService, Capability][]).filter(([s]) => probe.has(s)).map(([, c]) => c);
 }
 
 /** A PromoStandards supplier as a driver: `X-Supplier-Id` and `X-Supplier-Password`, production or test. */
