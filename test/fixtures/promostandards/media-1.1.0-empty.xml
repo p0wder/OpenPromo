@@ -1,0 +1,4 @@
+<!-- source: Media Content 1.1.0 schema (GetMediaContentResponse.xsd: MediaContentArray and errorMessage both minOccurs 0), not a live answer: a product with no media of the asked type -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns1:GetMediaContentResponse xmlns:ns1="http://www.promostandards.org/WSDL/MediaService/1.0.0/" xmlns:ns2="http://www.promostandards.org/WSDL/MediaService/1.0.0/SharedObjects/"/>
+</S:Body></S:Envelope>

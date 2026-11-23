@@ -7,10 +7,10 @@
  *
  * Built: Product Data 2.0.0, Inventory 2.0.0, Pricing and Configuration
  * 1.0.0, Order Status 1.0.0 and 2.0.0, Order Shipment Notification 1.0.0,
- * 2.0.0 and 2.1.0, Invoice 1.0.0. Request and response shapes follow the
- * PromoStandards schemas as SanMar's Web Services Integration Guide v24.7
- * (Oct 2026) prints them (Order Shipment Notification 2.0.0 and 2.1.0: the
- * official OSN schemas);
+ * 2.0.0 and 2.1.0, Invoice 1.0.0, Media Content 1.1.0. Request and response
+ * shapes follow the PromoStandards schemas as SanMar's Web Services
+ * Integration Guide v24.7 (Oct 2026) prints them (Order Shipment
+ * Notification 2.0.0 and 2.1.0, Media Content 1.1.0: the official schemas);
  * each parser reads both the 1.x and 2.x spellings where they differ.
  */
 import { OpenPromoError, type OpenPromoErrorKind } from "../errors.js";
@@ -19,6 +19,9 @@ import type {
   Inventory,
   Invoice,
   InvoiceQuery,
+  Media,
+  MediaItem,
+  MediaType,
   OrderLine,
   OrderQuery,
   OrderState,
@@ -101,14 +104,30 @@ interface ServiceMessage {
   severity: string;
 }
 
-function serviceMessages(res: XmlNode): ServiceMessage[] {
+function serviceMessages(res: XmlNode, bareText = false): ServiceMessage[] {
   const list = asArray(node(res.ServiceMessageArray)?.ServiceMessage as XmlNode | XmlNode[] | undefined);
   // 1.x services answer one `errorMessage` instead.
-  const legacy = asArray((res.errorMessage ?? res.ErrorMessage) as XmlNode | XmlNode[] | undefined);
+  const legacy = asArray((res.errorMessage ?? res.ErrorMessage) as XmlNode | XmlNode[] | string | (XmlNode | string)[] | undefined);
   return [...list, ...legacy]
-    .map((m) => ({ code: text(m.code), description: text(m.description), severity: text(m.severity) || "Error" }))
+    .map((m) =>
+      // `<errorMessage>words</errorMessage>` with no code, read only where the service's spec asks for it.
+      typeof m === "string" ? { code: "", description: bareText ? text(m) : "", severity: "Error" } : { code: text(m.code), description: text(m.description), severity: text(m.severity) || "Error" },
+    )
     .filter((m) => m.code || m.description);
 }
+
+/**
+ * Media Content's wording for problems, for an `errorMessage` with no code, a
+ * code the standard doesn't list, or the catch-all 999. First match wins;
+ * anything else is `refused` with the supplier's words.
+ */
+export const MEDIA_MESSAGE_WORDS: readonly [RegExp, OpenPromoErrorKind][] = [
+  [/\bnot (?:been )?(?:authori[sz]ed|enabled|activated|permitted)\b.*\b(?:service|media)\b|\bservice (?:is )?not (?:available|enabled)\b|\bnot supported\b/i, "not_enabled"],
+  [/\bauthenticat|\bcredential|\bpassword\b|\bunauthori[sz]ed\b|\blog ?in\b|\binvalid (?:customer ?)?id\b|\baccess denied\b/i, "auth"],
+  [/\bno (?:media|results?|records?|data|images?|content)\b|\bnot found\b|\bdoes(?: not|n'?t) exist\b|\b(?:invalid|unknown) (?:product|part)\b/i, "not_found"],
+  [/\btoo many\b|\brate limit|\bthrottl/i, "rate_limited"],
+  [/\brequired\b|\bmissing\b|\binvalid\b|\bnot (?:a )?valid\b/i, "invalid"],
+];
 
 /* ---------------------------------------------------------------- Each service, by version */
 
@@ -119,6 +138,8 @@ interface ServiceSpec {
   soapAction?: string;
   /** Request fields in the operation's own namespace (`ns:`); every other field is a shared object (`shar:`). */
   ownFields?: readonly string[];
+  /** Wording that names a problem when a message's code doesn't (Media Content); bare-text `errorMessage`s are read too. */
+  messageWords?: readonly [RegExp, OpenPromoErrorKind][];
 }
 
 const PS = "http://www.promostandards.org/WSDL";
@@ -166,6 +187,27 @@ const SPECS: Record<PromoStandardsService, Record<string, ServiceSpec>> = {
   invoices: {
     "1.0.0": { namespace: (v) => `${PS}/Invoice/${v}/`, request: "GetInvoicesRequest", response: "GetInvoicesResponse", soapAction: "getInvoices" },
   },
+  // Media Content 1.1.0 keeps the 1.0.0 namespace (MediaContentService.wsdl). `classType` is the
+  // request's one field declared in the operation's own schema; the rest are SharedObjects.
+  media: {
+    "1.1.0": {
+      namespace: () => `${PS}/MediaService/1.0.0/`,
+      request: "GetMediaContentRequest",
+      response: "GetMediaContentResponse",
+      soapAction: "getMediaContent",
+      ownFields: ["classType"],
+      messageWords: MEDIA_MESSAGE_WORDS,
+    },
+  },
+};
+
+/** Media Content's other operation. The WSDL's SOAP action is `urn:getMediaDateModified`, unlike getMediaContent's. */
+const MEDIA_DATE_MODIFIED: ServiceSpec = {
+  namespace: () => `${PS}/MediaService/1.0.0/`,
+  request: "GetMediaDateModifiedRequest",
+  response: "GetMediaDateModifiedResponse",
+  soapAction: "urn:getMediaDateModified",
+  messageWords: MEDIA_MESSAGE_WORDS,
 };
 
 const FOB_POINTS: ServiceSpec = { namespace: (v) => `${PS}/PricingAndConfiguration/${v}/`, request: "GetFobPointsRequest", response: "GetFobPointsResponse", soapAction: "getFobPoints" };
@@ -425,6 +467,32 @@ export function parseInvoices(res: XmlNode): Invoice[] {
   }));
 }
 
+/** Media Content 1.1.0: every `MediaContent` in `MediaContentArray` (those with a URL), in the shared shape; empty when there's none. */
+export function parseMedia(res: XmlNode, productId: string): Media {
+  const pairs = (m: XmlNode, arrayKey: string, itemKey: string, idKey: string, nameKey: string) => list(m, arrayKey, itemKey).map((x) => ({ id: text(x[idKey]), name: text(x[nameKey]) })).filter((x) => x.id || x.name);
+  const items = list(res, "MediaContentArray", "MediaContent")
+    .filter((m) => text(m.url))
+    .map((m): MediaItem => {
+      const item: MediaItem = { url: text(m.url), mediaType: text(m.mediaType), classTypes: pairs(m, "ClassTypeArray", "ClassType", "classTypeId", "classTypeName") };
+      const strings = { partId: opt(m.partId), color: opt(m.color), description: opt(m.description), changedAt: opt(m.changeTimeStamp) };
+      const numbers = { width: num(m.width), height: num(m.height), dpi: num(m.dpi), fileSize: num(m.fileSize) };
+      for (const [k, v] of Object.entries(strings) as [keyof typeof strings, string | undefined][]) if (v !== undefined) item[k] = v;
+      for (const [k, v] of Object.entries(numbers) as [keyof typeof numbers, number | undefined][]) if (v !== undefined) item[k] = v;
+      if (text(m.singlePart)) item.singlePart = yes(m.singlePart);
+      const decorations = pairs(m, "DecorationArray", "Decoration", "decorationId", "decorationName");
+      const locations = pairs(m, "LocationArray", "Location", "locationId", "locationName");
+      if (decorations.length) item.decorations = decorations;
+      if (locations.length) item.locations = locations;
+      return item;
+    });
+  return { productId, items };
+}
+
+/** Media Content 1.1.0 getMediaDateModified: the product ids in `MediaDateModifiedArray`, each once, in the order sent. */
+export function parseMediaChanges(res: XmlNode): string[] {
+  return [...new Set(list(res, "MediaDateModifiedArray", "MediaDateModified").map((m) => text(m.productId)).filter(Boolean))];
+}
+
 export function parseInventory(res: XmlNode): Inventory | null {
   const inv = child(res, "Inventory");
   if (!inv) return null;
@@ -513,9 +581,11 @@ export class PromoStandardsClient {
   }
 
   /** The error for a service message, or null for warnings and information. */
-  messageError(m: ServiceMessage): OpenPromoError | null {
+  messageError(m: ServiceMessage, words?: readonly [RegExp, OpenPromoErrorKind][]): OpenPromoError | null {
     if (!/^error$/i.test(m.severity)) return null;
-    const kind = this.supplier.messageKinds?.[m.code] ?? MESSAGE_KINDS[m.code] ?? "refused";
+    // Wording only where the code says nothing (none, not in the standard's table, or 999 "General error").
+    const byWords = words && (!m.code || !MESSAGE_KINDS[m.code] || m.code === "999") ? words.find(([re]) => re.test(m.description))?.[1] : undefined;
+    const kind = this.supplier.messageKinds?.[m.code] ?? byWords ?? MESSAGE_KINDS[m.code] ?? "refused";
     return new OpenPromoError(kind, undefined, { supplier: this.supplier.id, code: m.code, detail: m.description || `code ${m.code}` });
   }
 
@@ -552,8 +622,8 @@ export class PromoStandardsClient {
     const raw = answer[use.response];
     const res = node(raw) ?? (raw === "" ? {} : undefined);
     if (!res) throw new OpenPromoError("bad_response", undefined, { supplier: this.supplier.id, detail: `no ${use.response} in the answer` });
-    for (const m of serviceMessages(res)) {
-      const err = this.messageError(m);
+    for (const m of serviceMessages(res, !!use.messageWords)) {
+      const err = this.messageError(m, use.messageWords);
       if (err) throw err;
     }
     return res;
@@ -689,6 +759,31 @@ export class PromoStandardsClient {
       return parseInvoices(await this.call("invoices", q));
     } catch (e) {
       if (e instanceof OpenPromoError && (e.kind === "not_found" || e.kind === "not_yet")) return [];
+      throw e;
+    }
+  }
+
+  /**
+   * Media Content (1.1.0): a product's pictures (or videos, sound, documents:
+   * one `mediaType` per call, "Image" by default), optionally for one part, of
+   * one class type, or in one culture ("en-US"). No media is an empty list.
+   */
+  async getMedia(productId: string, opts: { mediaType?: MediaType; partId?: string; classType?: number | string; cultureName?: string } = {}): Promise<Media> {
+    try {
+      const res = await this.call("media", { cultureName: opts.cultureName, mediaType: opts.mediaType ?? "Image", productId, partId: opts.partId, classType: opts.classType });
+      return parseMedia(res, productId);
+    } catch (e) {
+      if (e instanceof OpenPromoError && e.kind === "not_found") return { productId, items: [] };
+      throw e;
+    }
+  }
+
+  /** Media Content (1.1.0) getMediaDateModified: the product ids whose media changed since a time (ISO 8601). Empty when none did. */
+  async getMediaChanges(since: string): Promise<string[]> {
+    try {
+      return parseMediaChanges(await this.call("media", { changeTimeStamp: since }, MEDIA_DATE_MODIFIED));
+    } catch (e) {
+      if (e instanceof OpenPromoError && e.kind === "not_found") return [];
       throw e;
     }
   }

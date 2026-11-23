@@ -1,0 +1,42 @@
+<!-- source: Media Content 1.1.0 schema (GetMediaContentResponse.xsd and SharedMediaObjects.xsd, promostandards.org ProductMedia-1-1-0a-1.zip), not a live answer: element names, order and namespaces as the schema gives them (MediaContent and its own fields in the service namespace, productId, partId, mediaType and changeTimeStamp in SharedObjects), values and URLs made up -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns1:GetMediaContentResponse xmlns:ns1="http://www.promostandards.org/WSDL/MediaService/1.0.0/" xmlns:ns2="http://www.promostandards.org/WSDL/MediaService/1.0.0/SharedObjects/">
+ <ns1:MediaContentArray>
+  <ns1:MediaContent>
+   <ns2:productId>TEE100</ns2:productId>
+   <ns1:url>https://media.acme.example/TEE100/tee100-primary.jpg</ns1:url>
+   <ns2:mediaType>Image</ns2:mediaType>
+   <ns1:ClassTypeArray>
+    <ns1:ClassType><ns1:classTypeId>1006</ns1:classTypeId><ns1:classTypeName>Primary</ns1:classTypeName></ns1:ClassType>
+    <ns1:ClassType><ns1:classTypeId>1007</ns1:classTypeId><ns1:classTypeName>Front</ns1:classTypeName></ns1:ClassType>
+    <ns1:ClassType><ns1:classTypeId>500</ns1:classTypeId><ns1:classTypeName>High</ns1:classTypeName></ns1:ClassType>
+   </ns1:ClassTypeArray>
+   <ns1:fileSize>482133</ns1:fileSize>
+   <ns1:width>2000</ns1:width>
+   <ns1:height>2400</ns1:height>
+   <ns1:dpi>300</ns1:dpi>
+   <ns1:description>Classic tee, front</ns1:description>
+   <ns1:singlePart>false</ns1:singlePart>
+   <ns2:changeTimeStamp>2026-11-02T14:05:00Z</ns2:changeTimeStamp>
+  </ns1:MediaContent>
+  <ns1:MediaContent>
+   <ns2:productId>TEE100</ns2:productId>
+   <ns2:partId>TEE100-NVY-L</ns2:partId>
+   <ns1:url>https://media.acme.example/TEE100/tee100-navy-back.jpg</ns1:url>
+   <ns2:mediaType>Image</ns2:mediaType>
+   <ns1:ClassTypeArray>
+    <ns1:ClassType><ns1:classTypeId>1008</ns1:classTypeId><ns1:classTypeName>Rear</ns1:classTypeName></ns1:ClassType>
+   </ns1:ClassTypeArray>
+   <ns1:width>1000</ns1:width>
+   <ns1:height>1200</ns1:height>
+   <ns1:color>Navy</ns1:color>
+   <ns1:DecorationArray>
+    <ns1:Decoration><ns1:decorationId>1</ns1:decorationId><ns1:decorationName>Screen Print</ns1:decorationName></ns1:Decoration>
+   </ns1:DecorationArray>
+   <ns1:LocationArray>
+    <ns1:Location><ns1:locationId>12</ns1:locationId><ns1:locationName>Full Back</ns1:locationName></ns1:Location>
+   </ns1:LocationArray>
+   <ns1:singlePart>true</ns1:singlePart>
+  </ns1:MediaContent>
+ </ns1:MediaContentArray>
+</ns1:GetMediaContentResponse></S:Body></S:Envelope>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkSupplierConfig, OpenPromoError, SUPPORTED_VERSIONS, PromoStandardsClient, SANMAR_PROMOSTANDARDS, orderStateOf, parseOrderStatusV1 } from "../src/index.js";
+import { checkSupplierConfig, OpenPromoError, SUPPORTED_VERSIONS, PromoStandardsClient, SANMAR_PROMOSTANDARDS, orderStateOf, parseOrderStatusV1, promoStandardsCapabilities, promoStandardsConnection } from "../src/index.js";
 import { readSoapBody } from "../src/soap.js";
 import { elementsOf, fakeSoap, fixture } from "./helpers.js";
 
@@ -377,6 +377,124 @@ describe("Product Data 2.0.0 and Pricing and Configuration 1.0.0", () => {
     expect(calls[0]!.xml).toContain("<shar:currency>USD</shar:currency><shar:fobId>1</shar:fobId><shar:priceType>List</shar:priceType>");
     expect(calls[0]!.xml).toContain("<shar:configurationType>Blank</shar:configurationType>");
     expect(pricing).toEqual({ productId: "K500", priceType: "Net", currency: "USD", parts: [{ partId: "240831", prices: [{ minQuantity: 1, price: 899, uom: "CA", effectiveDate: "2023-05-19T12:51:32.780", expiryDate: "2023-05-19T23:59:59.000" }] }] });
+  });
+});
+
+describe("Media Content 1.1.0", () => {
+  const ACME = { id: "acme", name: "Acme Promo", endpoints: { media: { version: "1.1.0", url: "https://ps.acme.example/media" } } };
+  const acme = (routes: Parameters<typeof fakeSoap>[0]) => {
+    const fake = fakeSoap(routes);
+    return { ps: new PromoStandardsClient(ACME, login, { fetch: fake.fetch }), calls: fake.calls };
+  };
+  // An answer carrying only an errorMessage, as SharedMediaObjects.xsd shapes it (or bare words, which some suppliers send).
+  const errorAnswer = (inner: string) =>
+    `<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body><ns1:GetMediaContentResponse xmlns:ns1="http://www.promostandards.org/WSDL/MediaService/1.0.0/" xmlns:ns2="http://www.promostandards.org/WSDL/MediaService/1.0.0/SharedObjects/"><ns2:errorMessage>${inner}</ns2:errorMessage></ns1:GetMediaContentResponse></S:Body></S:Envelope>`;
+  const message = (code: string, description: string) => errorAnswer(`<ns2:code>${code}</ns2:code><ns2:description>${description}</ns2:description>`);
+
+  it("is a supported config", () => {
+    expect(SUPPORTED_VERSIONS.media).toEqual(["1.1.0"]);
+    expect(checkSupplierConfig(ACME)).toEqual([]);
+    expect(checkSupplierConfig({ ...ACME, endpoints: { media: { version: "1.0.0", url: "https://ps.acme.example/media" } } })).toEqual(["media 1.0.0 isn't supported (supported: 1.1.0)"]);
+  });
+
+  it("asks getMediaContent in the 1.0.0 namespace with wsVersion 1.1.0, Image by default, classType in the service namespace", async () => {
+    const { ps, calls } = acme({ GetMediaContentRequest: fixture("promostandards/media-1.1.0-images.xml") });
+    await ps.getMedia("TEE100");
+    await ps.getMedia("TEE100", { mediaType: "Document", partId: "TEE100-NVY-L", classType: 1006, cultureName: "en-US" });
+    const [plain, filtered] = calls;
+    expect(plain!.url).toBe("https://ps.acme.example/media");
+    expect(plain!.soapAction).toBe("getMediaContent");
+    expect(plain!.xml).toContain('xmlns:ns="http://www.promostandards.org/WSDL/MediaService/1.0.0/"');
+    expect(plain!.xml).toContain('xmlns:shar="http://www.promostandards.org/WSDL/MediaService/1.0.0/SharedObjects/"');
+    expect(plain!.xml).toContain("<ns:GetMediaContentRequest><shar:wsVersion>1.1.0</shar:wsVersion><shar:id>webuser</shar:id><shar:password>s3cret&amp;&lt;</shar:password><shar:mediaType>Image</shar:mediaType><shar:productId>TEE100</shar:productId></ns:GetMediaContentRequest>");
+    // The schema's order: cultureName, mediaType, productId, partId, classType.
+    expect(filtered!.xml).toContain("<shar:password>s3cret&amp;&lt;</shar:password><shar:cultureName>en-US</shar:cultureName><shar:mediaType>Document</shar:mediaType><shar:productId>TEE100</shar:productId><shar:partId>TEE100-NVY-L</shar:partId><ns:classType>1006</ns:classType>");
+  });
+
+  it("reads images with several class types and a part-specific picture in the shared shape", async () => {
+    const media = await acme({ GetMediaContentRequest: fixture("promostandards/media-1.1.0-images.xml") }).ps.getMedia("TEE100");
+    expect(media).toEqual({
+      productId: "TEE100",
+      items: [
+        {
+          url: "https://media.acme.example/TEE100/tee100-primary.jpg",
+          mediaType: "Image",
+          classTypes: [
+            { id: "1006", name: "Primary" },
+            { id: "1007", name: "Front" },
+            { id: "500", name: "High" },
+          ],
+          description: "Classic tee, front",
+          changedAt: "2026-11-02T14:05:00Z",
+          width: 2000,
+          height: 2400,
+          dpi: 300,
+          fileSize: 482133,
+          singlePart: false,
+        },
+        {
+          url: "https://media.acme.example/TEE100/tee100-navy-back.jpg",
+          mediaType: "Image",
+          partId: "TEE100-NVY-L",
+          color: "Navy",
+          classTypes: [{ id: "1008", name: "Rear" }],
+          width: 1000,
+          height: 1200,
+          singlePart: true,
+          decorations: [{ id: "1", name: "Screen Print" }],
+          locations: [{ id: "12", name: "Full Back" }],
+        },
+      ],
+    });
+    // Left out, not empty, when not sent.
+    expect(Object.keys(media.items[1]!)).not.toContain("description");
+    expect(Object.keys(media.items[0]!)).not.toContain("decorations");
+  });
+
+  it("reads a document", async () => {
+    const media = await acme({ GetMediaContentRequest: fixture("promostandards/media-1.1.0-document.xml") }).ps.getMedia("TEE100", { mediaType: "Document" });
+    expect(media).toEqual({ productId: "TEE100", items: [{ url: "https://media.acme.example/TEE100/tee100-spec-sheet.pdf", mediaType: "Document", classTypes: [{ id: "2001", name: "Spec Sheet" }], singlePart: false }] });
+  });
+
+  it("no media is an empty list, not an error: an empty answer, 160, or the supplier's words", async () => {
+    const empty = { productId: "TEE100", items: [] };
+    expect(await acme({ GetMediaContentRequest: fixture("promostandards/media-1.1.0-empty.xml") }).ps.getMedia("TEE100")).toEqual(empty);
+    expect(await acme({ GetMediaContentRequest: message("160", "No Results Found") }).ps.getMedia("TEE100")).toEqual(empty);
+    expect(await acme({ GetMediaContentRequest: message("999", "No media found for product TEE100") }).ps.getMedia("TEE100")).toEqual(empty);
+    expect(await acme({ GetMediaContentRequest: errorAnswer("Product Id not found") }).ps.getMedia("TEE100")).toEqual(empty);
+  });
+
+  it("maps error messages to typed errors, by code and else by wording; unknown wording is refused with the supplier's words", async () => {
+    const fail = (answer: string) =>
+      acme({ GetMediaContentRequest: answer })
+        .ps.getMedia("TEE100")
+        .then(() => null, (e: OpenPromoError) => [e.kind, e.code || null, e.detail ?? null]);
+    expect(await fail(fixture("promostandards/error-media-1.1.0.xml"))).toEqual(["auth", "105", "Authentication Credentials failed"]);
+    expect(await fail(message("104", "Account not authorized"))).toEqual(["not_enabled", "104", "Account not authorized"]);
+    expect(await fail(message("999", "Invalid password"))).toEqual(["auth", "999", "Invalid password"]);
+    expect(await fail(errorAnswer("Your account is not authorized to use the Media service"))).toEqual(["not_enabled", null, "Your account is not authorized to use the Media service"]);
+    expect(await fail(errorAnswer("mediaType is required"))).toEqual(["invalid", null, "mediaType is required"]);
+    expect(await fail(message("42", "Image server is down for maintenance"))).toEqual(["refused", "42", "Image server is down for maintenance"]);
+    expect(await fail(message("999", "General Error"))).toEqual(["refused", "999", "General Error"]);
+  });
+
+  it("asks getMediaDateModified (SOAP action urn:getMediaDateModified) for the products whose media changed since a time", async () => {
+    const { ps, calls } = acme({ GetMediaDateModifiedRequest: fixture("promostandards/media-date-modified-1.1.0.xml") });
+    expect(await ps.getMediaChanges("2026-11-20T00:00:00Z")).toEqual(["TEE100", "CAP200"]);
+    expect(calls[0]!.soapAction).toBe("urn:getMediaDateModified");
+    expect(calls[0]!.xml).toContain('xmlns:ns="http://www.promostandards.org/WSDL/MediaService/1.0.0/"');
+    expect(calls[0]!.xml).toContain("<ns:GetMediaDateModifiedRequest><shar:wsVersion>1.1.0</shar:wsVersion><shar:id>webuser</shar:id><shar:password>s3cret&amp;&lt;</shar:password><shar:changeTimeStamp>2026-11-20T00:00:00Z</shar:changeTimeStamp></ns:GetMediaDateModifiedRequest>");
+    const none = `<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body><ns1:GetMediaDateModifiedResponse xmlns:ns1="http://www.promostandards.org/WSDL/MediaService/1.0.0/"/></S:Body></S:Envelope>`;
+    expect(await acme({ GetMediaDateModifiedRequest: none }).ps.getMediaChanges("2026-11-20T00:00:00Z")).toEqual([]);
+  });
+
+  it("a supplier without the service says so; a media endpoint adds no driver capability yet and leaves the others alone", async () => {
+    const none = new PromoStandardsClient(SANMAR_PROMOSTANDARDS, login, { fetch: fakeSoap({}).fetch });
+    await expect(none.getMedia("PC54")).rejects.toMatchObject({ kind: "not_enabled" });
+    const both = { ...ACME, endpoints: { ...ACME.endpoints, shipments: { version: "2.1.0", url: "https://ps.acme.example/osn21" } } };
+    expect(checkSupplierConfig(both)).toEqual([]);
+    expect(promoStandardsCapabilities(both)).toEqual(["shipments"]);
+    expect(Object.keys(promoStandardsConnection(new PromoStandardsClient(both, login)))).toEqual(["shipments"]);
   });
 });
 

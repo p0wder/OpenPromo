@@ -35,6 +35,7 @@ export function serviceKey(name: string): PromoStandardsService | null {
   if (n === "orderstatus" || n === "odrstat") return "orderStatus";
   if (n === "ordershipmentnotification" || n === "osn") return "shipments";
   if (n === "invoice" || n === "invoices" || n === "invc") return "invoices";
+  if (n === "mediacontent" || n === "media" || n === "med") return "media";
   return null;
 }
 
@@ -129,7 +130,7 @@ export function listingsFromRepository(companies: readonly RepositoryCompany[] |
     for (const ep of endpointsByCode.get(company.code) ?? []) {
       const key = serviceKey(ep.service);
       const label = `${company.name}: ${ep.service} ${ep.version}`;
-      if (!key) continue; // a service OpenPromo doesn't speak (Media, Purchase Order, …): not worth a line
+      if (!key) continue; // a service OpenPromo doesn't speak (Purchase Order, …): not worth a line
       if (ep.status && !/^production$/i.test(ep.status)) skipped.push(`${label}: listed as ${ep.status}`);
       else if (!SUPPORTED_VERSIONS[key].includes(ep.version)) skipped.push(`${label}: OpenPromo talks ${SUPPORTED_VERSIONS[key].join(", ")}`);
       else if (!/^https:\/\//i.test(ep.url)) skipped.push(`${label}: URL isn't https (${ep.url || "none"})`);
