@@ -83,7 +83,7 @@ export function openApiDocument(origin: string, config?: Pick<ServerConfig, "sup
     security: [{ bearer: [] }],
     paths: {
       "/health": { get: { summary: "Is the server up", security: [], responses: { "200": ok("ok, the version and how many suppliers it serves") } } },
-      "/v1/suppliers": { get: { summary: "The suppliers this server serves", parameters: [query("search", "Words in the id or name"), query("capability", "Only those that answer this: product, inventory, pricing, orderStatus, shipments, invoices, media, mediaChanges"), query("kind", "native or promostandards")], responses: { "200": ok("count and suppliers") } } },
+      "/v1/suppliers": { get: { summary: "The suppliers this server serves", parameters: [query("search", "Words in the id or name"), query("capability", "Only those that answer this: product, inventory, pricing, orderStatus, shipments, invoices, media, mediaChanges; or orders, for those that can take orders (GET /v1/suppliers/{id} says whether this server allows it)"), query("kind", "native or promostandards")], responses: { "200": ok("count and suppliers") } } },
       "/v1/suppliers/{supplier}": get("One supplier: its login headers, environments, what it answers and its own routes", [], "the supplier"),
       "/v1/{supplier}/products/{productId}": get("A product with its parts (colors and sizes)", [path("productId", "The supplier's product or style id")], "the product"),
       "/v1/{supplier}/products/{productId}/inventory": get("Stock per part and warehouse", [path("productId", "The supplier's product or style id"), query("partId", "Only these parts (repeat for several)")], "inventory"),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PurchaseOrderInput } from "../src/index.js";
+import { DIRECTORY, type PurchaseOrderInput } from "../src/index.js";
 import { createHandler, loadConfig } from "../src/server/index.js";
 import { fakeSoap, fixture } from "./helpers.js";
 
@@ -189,5 +189,59 @@ describe("who has the order routes", () => {
     expect(doc.components.schemas.PurchaseOrder.properties).toHaveProperty("skipDuplicateCheck");
     expect(Object.keys(doc.paths).filter((p) => /^\/v1\/(acme|bolt)\//.test(p))).toEqual([]);
     expect(doc.paths).toHaveProperty(["/v1/sanmar/orders"]);
+  });
+});
+
+describe("ordering from the synced directory", () => {
+  const withPO = DIRECTORY.filter((d) => d.endpoints.purchaseOrder);
+  function directoryServer(env: Record<string, string> = {}) {
+    const fake = fakeSoap({ GetSupportedOrderTypesRequest: BLANK_TAKEN, GetOrderStatusRequest: NOTHING_UNDER_PO, SendPORequest: SENT });
+    const handler = createHandler(loadConfig({ OPENPROMO_API_KEY: KEY, ...env }, { fetch: fake.fetch }), { log: () => {} });
+    const call = async (path: string, body?: unknown, headers: Record<string, string> = LOGIN) => {
+      const init: RequestInit = body === undefined ? {} : { method: "POST", body: JSON.stringify(body) };
+      const res = await handler(new Request(`https://openpromo.test${path}`, { ...init, headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json", ...headers } }));
+      return { status: res.status, body: (await res.json()) as Record<string, any> };
+    };
+    return { call, calls: fake.calls };
+  }
+
+  it("hundreds of directory suppliers list PO 1.0.0, and ?capability=orders lists them with SanMar and S&S, without changing capabilities", async () => {
+    expect(withPO.length).toBeGreaterThan(400);
+    expect(withPO.every((d) => d.endpoints.purchaseOrder!.version === "1.0.0")).toBe(true);
+    const { call } = directoryServer();
+    const takers = (await call("/v1/suppliers?capability=orders")).body;
+    const ids = takers.suppliers.map((s: { id: string }) => s.id);
+    expect(ids).toEqual(expect.arrayContaining(["sanmar", "ssactivewear"]));
+    const served = new Set((await call("/v1/suppliers?kind=promostandards")).body.suppliers.map((s: { id: string }) => s.id));
+    expect(takers.count).toBe(2 + withPO.filter((d) => served.has(d.id)).length);
+    for (const s of takers.suppliers) expect(s.capabilities).not.toContain("orders");
+    const bad = await call("/v1/suppliers?capability=bogus");
+    expect(bad.status).toBe(400);
+    expect(bad.body.error.message).toMatch(/orders/);
+  });
+
+  it("no directory supplier may order until named in OPENPROMO_ORDERS, not even with OPENPROMO_ORDERS=on", async () => {
+    const id = withPO.find((d) => d.endpoints.purchaseOrder!.testUrl && d.endpoints.orderStatus?.testUrl && d.endpoints.orderStatus.version === "2.0.0")!.id;
+    for (const orders of [undefined, "on", "sanmar,ssactivewear"]) {
+      const { call, calls } = directoryServer(orders ? { OPENPROMO_ORDERS: orders } : {});
+      const takers = (await call("/v1/suppliers?capability=orders&kind=promostandards")).body.suppliers;
+      for (const s of takers) expect((await call(`/v1/suppliers/${s.id}`)).body.ordersAllowed, `${s.id} with ${orders}`).toBe(false);
+      const refused = await call(`/v1/${id}/orders`, order());
+      expect(refused.status).toBe(403);
+      expect(refused.body.error).toMatchObject({ kind: "orders_off", supplier: id });
+      expect(calls).toEqual([]);
+    }
+    // Named, it may: a Blank test order goes to the supplier's test URL.
+    const { call, calls } = directoryServer({ OPENPROMO_ORDERS: id });
+    const detail = (await call(`/v1/suppliers/${id}`)).body;
+    expect(detail.ordersAllowed).toBe(true);
+    expect(detail.routes).toContainEqual({ method: "POST", path: `/v1/${id}/orders`, summary: expect.any(String), write: true, allowed: true });
+    const placed = await call(`/v1/${id}/orders`, order(), { ...LOGIN, "X-Supplier-Environment": "test" });
+    expect(placed, JSON.stringify(placed.body)).toMatchObject({ status: 201 });
+    const listing = withPO.find((d) => d.id === id)!;
+    expect(calls.filter((c) => c.operation === "SendPORequest").map((c) => c.url)).toEqual([listing.endpoints.purchaseOrder!.testUrl]);
+    // Another directory supplier stays off.
+    const other = withPO.find((d) => d.id !== id)!.id;
+    expect((await call(`/v1/${other}/orders`, order())).status).toBe(403);
   });
 });
