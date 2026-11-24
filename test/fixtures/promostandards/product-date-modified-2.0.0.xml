@@ -1,0 +1,9 @@
+<!-- source: Product Data 2.0.0 schema (GetProductDateModifiedResponse.xsd and SharedProductObjects.xsd, promostandards.org ProductData2-0-0-1.zip), not a live answer: element names, order and namespaces as the schema gives them (ProductDateModified is a top-level element of the service namespace), values made up (one product changed in two parts, one with no part) -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns1:GetProductDateModifiedResponse xmlns:ns1="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/" xmlns:ns3="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/SharedObjects/">
+ <ns1:ProductDateModifiedArray>
+  <ns1:ProductDateModified><ns3:productId>TEE100</ns3:productId><ns3:partId>TEE100-RED-M</ns3:partId></ns1:ProductDateModified>
+  <ns1:ProductDateModified><ns3:productId>POLO300</ns3:productId></ns1:ProductDateModified>
+  <ns1:ProductDateModified><ns3:productId>TEE100</ns3:productId><ns3:partId>TEE100-RED-L</ns3:partId></ns1:ProductDateModified>
+ </ns1:ProductDateModifiedArray>
+</ns1:GetProductDateModifiedResponse></S:Body></S:Envelope>

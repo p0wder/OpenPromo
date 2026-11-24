@@ -7,9 +7,9 @@
  */
 import { createHash, timingSafeEqual } from "node:crypto";
 import { OpenPromoError, type OpenPromoErrorKind } from "../errors.js";
-import type { InvoiceQuery, PriceType } from "../promostandards/types.js";
+import type { InvoiceQuery, MediaType, PriceType, ProductList } from "../promostandards/types.js";
 import { CAPABILITIES, type Capability, type DriverRoute, type SupplierConnection } from "../suppliers/driver.js";
-import { connectionFor, environmentHeader, type ServerConfig, type SupplierDef } from "./config.js";
+import { connectionFor, environmentHeader, mayOrder, ordersOffMessage, type ServerConfig, type SupplierDef } from "./config.js";
 import { openApiDocument } from "./openapi.js";
 
 export const VERSION = "0.2.0";
@@ -62,6 +62,7 @@ function invoiceQuery(params: URLSearchParams): InvoiceQuery {
 }
 
 const PRICE_TYPES = new Set(["Net", "List", "Customer"]);
+const MEDIA_TYPES = new Set(["Image", "Video", "Audio", "Document"]);
 
 /** A driver route's `:name` segments against the path, or null when it doesn't match. */
 function matchRoute(pattern: string, rest: readonly string[]): Record<string, string> | null {
@@ -75,9 +76,13 @@ function matchRoute(pattern: string, rest: readonly string[]): Record<string, st
   return params;
 }
 
+/** Whether a supplier has a route that places orders (OPENPROMO_ORDERS still decides whether this server lets it). */
+export const takesOrders = (def: SupplierDef) => (def.driver.routes ?? []).some((r) => r.write);
+
 /** What the supplier list says about one supplier: never a login, only which headers carry one. */
-export function describeSupplier(def: SupplierDef, config: Pick<ServerConfig, "allowOrders">, detail = false) {
+export function describeSupplier(def: SupplierDef, config: Pick<ServerConfig, "orders">, detail = false) {
   const { driver } = def;
+  const allowed = mayOrder(config, def.id);
   return {
     id: def.id,
     name: def.name,
@@ -91,7 +96,9 @@ export function describeSupplier(def: SupplierDef, config: Pick<ServerConfig, "a
           login: driver.login.map((f) => ({ header: f.header, label: f.label })),
           environments: driver.environments,
           environmentHeader: environmentHeader(driver),
-          routes: (driver.routes ?? []).map((r) => ({ method: r.method, path: `/v1/${def.id}/${r.path}`, summary: r.summary, ...(r.write ? { write: true, allowed: config.allowOrders } : {}) })),
+          // Whether this supplier may place real orders on this server (OPENPROMO_ORDERS).
+          ordersAllowed: allowed,
+          routes: (driver.routes ?? []).map((r) => ({ method: r.method, path: `/v1/${def.id}/${r.path}`, summary: r.summary, ...(r.write ? { write: true, allowed } : {}) })),
           ...(driver.website ? { website: driver.website } : {}),
           ...(driver.notes ? { notes: driver.notes } : {}),
         }
@@ -128,9 +135,12 @@ export function createHandler(config: ServerConfig, opts: HandlerOptions = {}): 
         const words = (url.searchParams.get("search") ?? "").toLowerCase().split(/\s+/).filter(Boolean);
         const capability = url.searchParams.get("capability");
         const kind = url.searchParams.get("kind");
-        if (capability && !(CAPABILITIES as readonly string[]).includes(capability)) throw new OpenPromoError("invalid", `capability must be one of ${CAPABILITIES.join(", ")}.`);
+        // `orders` isn't a capability (capabilities drive the shared GET routes): it means the supplier has a write route
+        // (SanMar's and S&S's own, or `orders` for a PromoStandards supplier listing PO 1.0.0), whether or not this server allows it.
+        if (capability && capability !== "orders" && !(CAPABILITIES as readonly string[]).includes(capability)) throw new OpenPromoError("invalid", `capability must be one of ${CAPABILITIES.join(", ")}, orders.`);
+        const matches = (s: SupplierDef) => (capability === "orders" ? takesOrders(s) : s.driver.capabilities.includes(capability as Capability));
         const list = [...config.suppliers.values()].filter(
-          (s) => (!words.length || words.every((w) => `${s.id} ${s.name}`.toLowerCase().includes(w))) && (!capability || s.driver.capabilities.includes(capability as Capability)) && (!kind || s.driver.kind === kind),
+          (s) => (!words.length || words.every((w) => `${s.id} ${s.name}`.toLowerCase().includes(w))) && (!capability || matches(s)) && (!kind || s.driver.kind === kind),
         );
         return json(200, { count: list.length, suppliers: list.map((s) => describeSupplier(s, config)) });
       }
@@ -145,7 +155,7 @@ export function createHandler(config: ServerConfig, opts: HandlerOptions = {}): 
       if (r.method !== method) continue;
       const params = matchRoute(r.path, rest);
       if (!params) continue;
-      if (r.write && !config.allowOrders) return fail("orders_off", "Placing orders is switched off on this server. Set OPENPROMO_ORDERS=on to allow it.");
+      if (r.write && !mayOrder(config, def.id)) return fail("orders_off", ordersOffMessage(def), { supplier: def.id });
       const connection = connectionFor(def, req.headers, config);
       const answer = await r.handle({
         connection,
@@ -174,6 +184,20 @@ export function createHandler(config: ServerConfig, opts: HandlerOptions = {}): 
     const offers = (capability: Capability) => def.driver.capabilities.includes(capability);
     const notOffered = (capability: Capability) => fail("not_offered", `${def.name} doesn't offer ${capability} through OpenPromo. See GET /v1/suppliers/${def.id}.`, { supplier: def.id });
 
+    // GET /v1/{supplier}/products: every product it sells; ?changedSince=<ISO time>: those changed since then. One shape for both.
+    if (method === "GET" && rest[0] === "products" && rest.length === 1) {
+      const changedSince = url.searchParams.get("changedSince");
+      if (changedSince === null) {
+        if (!offers("productList")) return notOffered("productList");
+        const products = await ask("productList")();
+        return json(200, { count: products.length, products } satisfies ProductList);
+      }
+      if (!offers("productChanges")) return notOffered("productChanges");
+      if (!/^\d{4}-\d{2}-\d{2}/.test(changedSince) || Number.isNaN(Date.parse(changedSince))) throw new OpenPromoError("invalid", "Say since when: ?changedSince=<ISO time>, e.g. 2026-11-01T00:00:00Z.");
+      const products = await ask("productChanges")(changedSince);
+      return json(200, { changedSince, count: products.length, products } satisfies ProductList);
+    }
+
     if (method === "GET" && rest[0] === "products" && rest[1] && rest.length <= 3) {
       const id = rest[1];
       if (rest.length === 2) {
@@ -193,6 +217,21 @@ export function createHandler(config: ServerConfig, opts: HandlerOptions = {}): 
         const pricing = await ask("pricing")(id, { priceType: priceType as PriceType, partId: url.searchParams.get("partId") ?? undefined, fobId: url.searchParams.get("fobId") ?? undefined });
         return pricing ? json(200, pricing) : fail("not_found", `${def.name} has no product ${id}.`, { supplier: def.id });
       }
+      if (rest[2] === "media") {
+        if (!offers("media")) return notOffered("media");
+        const type = url.searchParams.get("type") ?? "Image";
+        if (!MEDIA_TYPES.has(type)) throw new OpenPromoError("invalid", "type must be Image, Video, Audio or Document.");
+        const filter = { mediaType: type as MediaType, partId: url.searchParams.get("partId") || undefined, classType: url.searchParams.get("classType") || undefined };
+        const media = await ask("media")(id, filter);
+        return media ? json(200, media) : fail("not_found", `${def.name} has no product ${id}.`, { supplier: def.id });
+      }
+    }
+
+    if (method === "GET" && rest[0] === "media" && rest[1] === "changes" && rest.length === 2) {
+      if (!offers("mediaChanges")) return notOffered("mediaChanges");
+      const since = url.searchParams.get("since") ?? "";
+      if (!/^\d{4}-\d{2}-\d{2}/.test(since) || Number.isNaN(Date.parse(since))) throw new OpenPromoError("invalid", "Say since when: ?since=<ISO time>, e.g. 2026-11-01T00:00:00Z.");
+      return json(200, { since, productIds: await ask("mediaChanges")(since) });
     }
 
     if (method === "GET" && rest[0] === "orders" && rest[1] && rest.length <= 3) {

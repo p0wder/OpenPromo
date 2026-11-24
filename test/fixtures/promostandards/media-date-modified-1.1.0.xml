@@ -1,0 +1,9 @@
+<!-- source: Media Content 1.1.0 schema (GetMediaDateModifiedResponse.xsd and SharedMediaObjects.xsd, promostandards.org ProductMedia-1-1-0a-1.zip), not a live answer: element names, order and namespaces as the schema gives them, values made up (one product listed for two parts) -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns1:GetMediaDateModifiedResponse xmlns:ns1="http://www.promostandards.org/WSDL/MediaService/1.0.0/" xmlns:ns2="http://www.promostandards.org/WSDL/MediaService/1.0.0/SharedObjects/">
+ <ns1:MediaDateModifiedArray>
+  <ns1:MediaDateModified><ns2:productId>TEE100</ns2:productId><ns2:partId>TEE100-NVY-L</ns2:partId></ns1:MediaDateModified>
+  <ns1:MediaDateModified><ns2:productId>TEE100</ns2:productId><ns2:partId>TEE100-RED-M</ns2:partId></ns1:MediaDateModified>
+  <ns1:MediaDateModified><ns2:productId>CAP200</ns2:productId><ns2:partId>CAP200-BLK</ns2:partId></ns1:MediaDateModified>
+ </ns1:MediaDateModifiedArray>
+</ns1:GetMediaDateModifiedResponse></S:Body></S:Envelope>

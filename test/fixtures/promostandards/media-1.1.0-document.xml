@@ -1,0 +1,15 @@
+<!-- source: Media Content 1.1.0 schema (GetMediaContentResponse.xsd and SharedMediaObjects.xsd, promostandards.org ProductMedia-1-1-0a-1.zip), not a live answer: a mediaType Document answer with only the required fields, element names, order and namespaces as the schema gives them, values and URL made up -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns1:GetMediaContentResponse xmlns:ns1="http://www.promostandards.org/WSDL/MediaService/1.0.0/" xmlns:ns2="http://www.promostandards.org/WSDL/MediaService/1.0.0/SharedObjects/">
+ <ns1:MediaContentArray>
+  <ns1:MediaContent>
+   <ns2:productId>TEE100</ns2:productId>
+   <ns1:url>https://media.acme.example/TEE100/tee100-spec-sheet.pdf</ns1:url>
+   <ns2:mediaType>Document</ns2:mediaType>
+   <ns1:ClassTypeArray>
+    <ns1:ClassType><ns1:classTypeId>2001</ns1:classTypeId><ns1:classTypeName>Spec Sheet</ns1:classTypeName></ns1:ClassType>
+   </ns1:ClassTypeArray>
+   <ns1:singlePart>false</ns1:singlePart>
+  </ns1:MediaContent>
+ </ns1:MediaContentArray>
+</ns1:GetMediaContentResponse></S:Body></S:Envelope>

@@ -1,0 +1,5 @@
+<!-- source: Media Content 1.1.0 schema (errorMessage { code, description } in SharedMediaObjects.xsd, no severity), not a live answer; code 105 from the PromoStandards error codes table, SanMar guide v24.7 p12 -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns1:GetMediaContentResponse xmlns:ns1="http://www.promostandards.org/WSDL/MediaService/1.0.0/" xmlns:ns2="http://www.promostandards.org/WSDL/MediaService/1.0.0/SharedObjects/">
+ <ns2:errorMessage><ns2:code>105</ns2:code><ns2:description>Authentication Credentials failed</ns2:description></ns2:errorMessage>
+</ns1:GetMediaContentResponse></S:Body></S:Envelope>

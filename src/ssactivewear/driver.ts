@@ -8,11 +8,12 @@ import type { InvoiceQuery, OrderQuery } from "../promostandards/types.js";
 import { SS_ORDER_SCHEMA } from "../server/schemas.js";
 import { errorAnswer, liveOrdersUnder, type SupplierConnection, type SupplierDriver } from "../suppliers/driver.js";
 import { SsActivewearClient, type SsActivewearClientOptions } from "./client.js";
-import { ssInventory, ssInvoices, ssOrderStatus, ssPricing, ssProduct, ssShipments } from "./map.js";
+import { ssInventory, ssInvoices, ssMedia, ssOrderStatus, ssPricing, ssProduct, ssShipments } from "./map.js";
 import { placeSsOrder, type SsOrderInput } from "./order.js";
 import type { SsOrder, SsStyle } from "./types.js";
 
-export interface SsActivewearConnection extends Required<SupplierConnection> {
+/** Every shared question but `mediaChanges` and `productChanges`: S&S can't say whose pictures or products changed. */
+export interface SsActivewearConnection extends Required<Omit<SupplierConnection, "mediaChanges" | "productChanges">> {
   ss: SsActivewearClient;
 }
 
@@ -34,6 +35,8 @@ export function ssActivewearConnection(ss: SsActivewearClient): SsActivewearConn
       const style = await styleOf(productId);
       return style ? ssProduct(style, await ss.products(style.styleID)) : null;
     },
+    // The styles catalog: every style S&S sells, by its numeric style id (the product id here). It names no SKUs.
+    productList: async () => [...new Set((await ss.styles()).filter((style) => style.styleID != null).map((style) => String(style.styleID)))].map((productId) => ({ productId, partIds: [] })),
     async inventory(productId, filter) {
       const id = await styleIdOf(productId);
       const products = id ? await ss.products(id) : [];
@@ -43,6 +46,11 @@ export function ssActivewearConnection(ss: SsActivewearClient): SsActivewearConn
       const id = await styleIdOf(productId);
       const products = id ? await ss.products(id) : [];
       return products.length ? ssPricing(id!, products, opts.priceType, { partId: opts.partId }) : null;
+    },
+    async media(productId, filter) {
+      if (filter.mediaType && filter.mediaType !== "Image") return { productId, items: [] };
+      const style = await styleOf(productId);
+      return style ? ssMedia(style, await ss.products(style.styleID), filter) : null;
     },
     orderStatus: async (query) => ssOrderStatus(await ordersFor(query)),
     shipments: async (query) => ssShipments(await ordersFor(query)),
@@ -65,7 +73,7 @@ export const ssActivewearDriver: SupplierDriver<SsActivewearConnection> = {
   id: "ssactivewear",
   name: "S&S Activewear",
   kind: "native",
-  capabilities: ["product", "inventory", "pricing", "orderStatus", "shipments", "invoices"],
+  capabilities: ["product", "productList", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media"],
   login: [
     { key: "account_number", header: "X-Supplier-Id", label: "S&S account number" },
     { key: "api_key", header: "X-Supplier-Password", label: "S&S API key" },

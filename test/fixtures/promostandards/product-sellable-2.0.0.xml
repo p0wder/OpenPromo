@@ -1,0 +1,10 @@
+<!-- source: Product Data 2.0.0 schema (GetProductSellableResponse.xsd and SharedProductObjects.xsd, promostandards.org ProductData2-0-0-1.zip), not a live answer: element names, order and namespaces as the schema gives them, values made up (one product listed for two parts and again with a culture point, one listed with no part) -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns1:GetProductSellableResponse xmlns:ns1="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/" xmlns:ns3="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/SharedObjects/">
+ <ns1:ProductSellableArray>
+  <ns1:ProductSellable><ns3:productId>TEE100</ns3:productId><ns3:partId>TEE100-NVY-L</ns3:partId></ns1:ProductSellable>
+  <ns1:ProductSellable><ns3:productId>TEE100</ns3:productId><ns3:partId>TEE100-RED-M</ns3:partId></ns1:ProductSellable>
+  <ns1:ProductSellable><ns3:productId>TEE100</ns3:productId><ns3:partId>TEE100-NVY-L</ns3:partId><ns3:culturePoint>en-CA</ns3:culturePoint></ns1:ProductSellable>
+  <ns1:ProductSellable><ns3:productId>CAP200</ns3:productId></ns1:ProductSellable>
+ </ns1:ProductSellableArray>
+</ns1:GetProductSellableResponse></S:Body></S:Envelope>

@@ -1,0 +1,6 @@
+<!-- source: PO 1.0.0 schema (SendPOResponse.xsd and SharedObjectsPO.xsd, promostandards.org purchaseOrder-1.0.0-1.zip), not a live answer: transactionId in the service namespace, ServiceMessageArray in SharedObjects; values made up -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns1:SendPOResponse xmlns:ns1="http://www.promostandards.org/WSDL/PO/1.0.0/" xmlns:ns2="http://www.promostandards.org/WSDL/PO/1.0.0/SharedObjects/">
+ <ns1:transactionId>TX-778201</ns1:transactionId>
+ <ns2:ServiceMessageArray><ns2:ServiceMessage><ns2:code>999</ns2:code><ns2:description>Line 2 will ship from a second warehouse</ns2:description><ns2:severity>Information</ns2:severity></ns2:ServiceMessage></ns2:ServiceMessageArray>
+</ns1:SendPOResponse></S:Body></S:Envelope>

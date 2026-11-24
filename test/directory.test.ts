@@ -32,7 +32,7 @@ describe("the directory as shipped", () => {
 
 describe("syncing from PromoStandards' repository", () => {
   it("reads service names long and short", () => {
-    expect(["Product Data", "PDS", "Inventory", "INV", "Product Pricing and Configuration", "PPC", "Order Status", "ODRSTAT", "Order Shipment Notification", "OSN", "Invoice", "INVC", "Media Content", "Purchase Order"].map(serviceKey)).toEqual([
+    expect(["Product Data", "PDS", "Inventory", "INV", "Product Pricing and Configuration", "PPC", "Order Status", "ODRSTAT", "Order Shipment Notification", "OSN", "Invoice", "INVC", "Media Content", "Purchase Order", "PO", "Company Data"].map(serviceKey)).toEqual([
       "productData",
       "productData",
       "inventory",
@@ -45,9 +45,12 @@ describe("syncing from PromoStandards' repository", () => {
       "shipments",
       "invoices",
       "invoices",
-      null,
+      "media",
+      "purchaseOrder",
+      "purchaseOrder",
       null,
     ]);
+    expect(serviceKey("MED")).toBe("media");
   });
 
   it("makes ids from company names", () => {
@@ -63,7 +66,13 @@ describe("syncing from PromoStandards' repository", () => {
 
   it("SanMar's own listing gives exactly the endpoints OpenPromo's SanMar driver uses", () => {
     const { listings } = listingsFromRepository([{ code: "SanMar", name: "SanMar", type: "Supplier" }], new Map([["SanMar", readEndpoints(JSON.parse(fixture("promostandards-repository/sanmar-endpoints.json")))]]));
-    expect(listings[0]!.endpoints).toEqual(SANMAR_PROMOSTANDARDS.endpoints);
+    // SanMar lists Purchase Order 1.0.0. SANMAR_PROMOSTANDARDS gains it separately (SanMar orders through its own PO
+    // service, not this route), so it's checked on its own: it must be SanMar's, or not there yet.
+    const { purchaseOrder, ...rest } = listings[0]!.endpoints;
+    const { purchaseOrder: driverPO, ...driverRest } = SANMAR_PROMOSTANDARDS.endpoints;
+    expect(rest).toEqual(driverRest);
+    expect(purchaseOrder).toEqual({ version: "1.0.0", url: "https://ws.sanmar.com:8080/promostandards/POServiceBinding", testUrl: "https://edev-ws.sanmar.com:8080/promostandards/POServiceBinding" });
+    if (driverPO) expect(driverPO).toEqual(purchaseOrder);
   });
 
   it("keeps the highest version OpenPromo talks, live suppliers only; reports everything it leaves out", () => {
@@ -89,14 +98,23 @@ describe("syncing from PromoStandards' repository", () => {
       ["SP", [ep("INV", "2.0.0", "https://sp.example/inv")]],
     ]);
     const { listings, skipped } = listingsFromRepository(companies, endpoints);
-    expect(listings).toEqual([{ id: "acme-promo", name: "Acme Promo, Inc.", code: "ACME", endpoints: { orderStatus: { version: "2.0.0", url: "https://acme.example/os2", testUrl: "https://test.acme.example/os2" } } }]);
+    expect(listings).toEqual([{ id: "acme-promo", name: "Acme Promo, Inc.", code: "ACME", endpoints: { orderStatus: { version: "2.0.0", url: "https://acme.example/os2", testUrl: "https://test.acme.example/os2" }, media: { version: "1.1.0", url: "https://acme.example/media" } } }]);
     expect(skipped).toEqual([
       "Acme Promo, Inc.: INV 1.2.1: OpenPromo talks 2.0.0",
       "Acme Promo, Inc.: INVC 1.0.0: URL isn't https (http://acme.example/invc)",
       "Old Co: INV 2.0.0: listed as In Review",
       "Old Co (OLD): no service OpenPromo can talk",
     ]);
-    expect(renderDirectoryData(listings, "2026-11-23")).toContain('{"id":"acme-promo","name":"Acme Promo, Inc.","code":"ACME","endpoints":{"orderStatus":{"version":"2.0.0","url":"https://acme.example/os2","testUrl":"https://test.acme.example/os2"}}},');
+    expect(renderDirectoryData(listings, "2026-11-23")).toContain('{"id":"acme-promo","name":"Acme Promo, Inc.","code":"ACME","endpoints":{"orderStatus":{"version":"2.0.0","url":"https://acme.example/os2","testUrl":"https://test.acme.example/os2"},"media":{"version":"1.1.0","url":"https://acme.example/media"}}},');
+  });
+
+  it("a supplier listing OSN 1.0.0, 2.0.0 and 2.1.0 ends up on 2.1.0, whatever order they're listed in", () => {
+    const ep = (version: string, url: string, testUrl = "") => ({ service: "OSN", version, url, testUrl, status: "Production" });
+    const endpoints = new Map([["MULTI", [ep("2.1.0", "https://multi.example/osn21", "https://test.multi.example/osn21"), ep("1.0.0", "https://multi.example/osn1"), ep("2.0.0", "https://multi.example/osn2")]]]);
+    const { listings, skipped } = listingsFromRepository([{ code: "MULTI", name: "Multi Version Co", type: "Supplier" }], endpoints);
+    expect(listings).toEqual([{ id: "multi-version", name: "Multi Version Co", code: "MULTI", endpoints: { shipments: { version: "2.1.0", url: "https://multi.example/osn21", testUrl: "https://test.multi.example/osn21" } } }]);
+    expect(skipped).toEqual([]);
+    expect(checkSupplierConfig({ id: listings[0]!.id, name: listings[0]!.name, endpoints: listings[0]!.endpoints })).toEqual([]);
   });
 
   it("two companies with the same name keep their codes apart", () => {

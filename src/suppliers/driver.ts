@@ -9,10 +9,18 @@
  * and leaves out what the supplier can't answer. Anything only one supplier
  * does (SanMar's own price list, placing an order) is a driver route.
  */
-import type { Inventory, Invoice, InvoiceQuery, OrderQuery, OrderStatus, PriceType, Pricing, Product, Shipment } from "../promostandards/types.js";
+import type { Inventory, Invoice, InvoiceQuery, ListedProduct, Media, OrderQuery, OrderStatus, PriceType, Pricing, Product, Shipment } from "../promostandards/types.js";
+import type { MediaFilter } from "./media.js";
 
-/** The shared questions, the same paths and shapes for every supplier. */
-export const CAPABILITIES = ["product", "inventory", "pricing", "orderStatus", "shipments", "invoices"] as const;
+/**
+ * The shared questions, the same paths and shapes for every supplier.
+ * `mediaChanges` (which products' media changed since a time) is its own
+ * question: some suppliers answer `media` but can't say what changed.
+ * `productList` (every product the supplier sells) and `productChanges`
+ * (the products changed since a time) are two questions for the same
+ * reason: S&S can list its styles but can't say which changed.
+ */
+export const CAPABILITIES = ["product", "productList", "productChanges", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media", "mediaChanges"] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
 /** One field of a supplier login, and the request header it comes in. */
@@ -37,11 +45,19 @@ export interface ConnectOptions {
 /** One supplier on one login. Every method is optional: a supplier that can't answer leaves it out. */
 export interface SupplierConnection {
   product?(productId: string): Promise<Product | null>;
+  /** Every product the supplier sells, with its parts where it names them. Empty when it lists none. */
+  productList?(): Promise<ListedProduct[]>;
+  /** The products (and parts) changed since a time (ISO 8601). Empty when none did. */
+  productChanges?(since: string): Promise<ListedProduct[]>;
   inventory?(productId: string, filter: { partIds?: string[] }): Promise<Inventory | null>;
   pricing?(productId: string, opts: { priceType: PriceType; partId?: string; fobId?: string }): Promise<Pricing | null>;
   orderStatus?(query: OrderQuery): Promise<OrderStatus[]>;
   shipments?(query: OrderQuery): Promise<Shipment[]>;
   invoices?(query: InvoiceQuery): Promise<Invoice[]>;
+  /** A product's pictures (or documents, videos, sound: one media type per call, Image by default). Null when the supplier has no such product. */
+  media?(productId: string, filter: MediaFilter): Promise<Media | null>;
+  /** The product ids whose media changed since a time (ISO 8601). */
+  mediaChanges?(since: string): Promise<string[]>;
 }
 
 /** What a driver route is handed. */
