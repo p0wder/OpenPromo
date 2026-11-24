@@ -1,0 +1,4 @@
+<!-- source: Product Data 2.0.0 schema (GetProductSellableResponse.xsd and SharedProductObjects.xsd, promostandards.org ProductData2-0-0-1.zip), not a live answer: ProductSellableArray is optional, so a supplier that sells nothing on this login answers without one -->
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body>
+<ns1:GetProductSellableResponse xmlns:ns1="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/" xmlns:ns3="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/SharedObjects/"/>
+</S:Body></S:Envelope>

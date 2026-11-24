@@ -3,8 +3,10 @@
  * PromoStandards services, so part ids match across product, stock, prices,
  * orders and invoices. Media is the exception: it comes from SanMar's own
  * Product Info images, which name each view, and SanMar doesn't answer
- * getMediaDateModified, so there's no `mediaChanges`. SanMar's own services
- * are driver routes: Product Info (colors, images, standard prices), its
+ * getMediaDateModified, so there's no `mediaChanges`. Its Product Data 2.0.0
+ * answers getProductSellable and getProductDateModified (guide v24.7
+ * p39-43), so `productList` and `productChanges` come from there, as for any
+ * PromoStandards supplier. SanMar's own services are driver routes: Product Info (colors, images, standard prices), its
  * price list with `myPrice` (the account's own price), and the PO service
  * (check and place orders).
  */
@@ -30,7 +32,7 @@ export const sanmarDriver: SupplierDriver<SanmarConnection> = {
   id: "sanmar",
   name: "SanMar",
   kind: "native",
-  capabilities: ["product", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media"],
+  capabilities: ["product", "productList", "productChanges", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media"],
   login: [
     { key: "customer_number", header: "X-SanMar-Customer-Number", label: "SanMar customer number" },
     { key: "username", header: "X-SanMar-Username", label: "sanmar.com web-services user" },

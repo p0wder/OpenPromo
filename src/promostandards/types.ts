@@ -42,6 +42,25 @@ export interface ProductPart {
   images?: Record<string, string>;
 }
 
+/**
+ * One product in a supplier's list: what it sells (Product Data's
+ * getProductSellable) or what changed (getProductDateModified). Only ids:
+ * ask `product` for the rest.
+ */
+export interface ListedProduct {
+  productId: string;
+  /** The parts the supplier named for it, each once, in its order. Empty when it lists products only (S&S's styles). */
+  partIds: string[];
+}
+
+/** `GET /v1/{supplier}/products[?changedSince=]`: every product the supplier sells, or those changed since a time. */
+export interface ProductList {
+  /** Only with `?changedSince=`: the time asked, as sent. */
+  changedSince?: string;
+  count: number;
+  products: ListedProduct[];
+}
+
 /* ---------------------------------------------------------------- Inventory */
 
 export interface Inventory {

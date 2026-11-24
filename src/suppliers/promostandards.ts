@@ -20,7 +20,8 @@ export interface PromoStandardsListing extends PromoStandardsSupplier {
 
 /** The shared questions each service answers. */
 const CAPABILITY_OF: Record<PromoStandardsService, readonly Capability[]> = {
-  productData: ["product"],
+  // Product Data 2.0.0 answers one product (getProduct), what the supplier sells (getProductSellable) and what changed (getProductDateModified).
+  productData: ["product", "productList", "productChanges"],
   inventory: ["inventory"],
   pricing: ["pricing"],
   orderStatus: ["orderStatus"],
@@ -42,6 +43,8 @@ async function psMedia(client: PromoStandardsClient, productId: string, f: Media
 export function promoStandardsConnection(client: PromoStandardsClient): SupplierConnection {
   const all: Required<SupplierConnection> = {
     product: (id) => client.getProduct(id),
+    productList: () => client.getProductsSellable(),
+    productChanges: (since) => client.getProductsChanged(since),
     inventory: (id, f) => client.getInventory(id, f.partIds?.length ? { partIds: f.partIds } : {}),
     pricing: (id, o) => client.getPricing(id, o),
     orderStatus: (q) => client.getOrderStatus(q),

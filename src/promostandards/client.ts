@@ -5,7 +5,8 @@
  * code. Every call takes the login it should use, so one client serves one
  * account and many clients serve many.
  *
- * Built: Product Data 2.0.0, Inventory 2.0.0, Pricing and Configuration
+ * Built: Product Data 2.0.0 (getProduct, getProductSellable,
+ * getProductDateModified), Inventory 2.0.0, Pricing and Configuration
  * 1.0.0, Order Status 1.0.0 and 2.0.0, Order Shipment Notification 1.0.0,
  * 2.0.0 and 2.1.0, Invoice 1.0.0, Media Content 1.1.0, Purchase Order 1.0.0
  * (Blank orders, from the official schema: see `order.ts`). Request and response
@@ -21,6 +22,7 @@ import type {
   Inventory,
   Invoice,
   InvoiceQuery,
+  ListedProduct,
   Media,
   MediaItem,
   MediaType,
@@ -206,6 +208,22 @@ const SPECS: Record<PromoStandardsService, Record<string, ServiceSpec>> = {
   purchaseOrder: {
     "1.0.0": { namespace: (v) => `${PS}/PO/${v}/`, request: "SendPORequest", response: "SendPOResponse", soapAction: "sendPO", ownFields: ["PO"] },
   },
+};
+
+/** Product Data 2.0.0's list of what the supplier sells (ProductDataService.wsdl, SOAP action getProductSellable). Every request field is a SharedObject. */
+const PRODUCT_SELLABLE: ServiceSpec = {
+  namespace: (v) => `${PS}/ProductDataService/${v}/`,
+  request: "GetProductSellableRequest",
+  response: "GetProductSellableResponse",
+  soapAction: "getProductSellable",
+};
+
+/** Product Data 2.0.0's products changed since a time (SOAP action getProductDateModified). */
+const PRODUCT_DATE_MODIFIED: ServiceSpec = {
+  namespace: (v) => `${PS}/ProductDataService/${v}/`,
+  request: "GetProductDateModifiedRequest",
+  response: "GetProductDateModifiedResponse",
+  soapAction: "getProductDateModified",
 };
 
 /** Media Content's other operation. The WSDL's SOAP action is `urn:getMediaDateModified`, unlike getMediaContent's. */
@@ -506,6 +524,30 @@ export function parseMediaChanges(res: XmlNode): string[] {
   return [...new Set(list(res, "MediaDateModifiedArray", "MediaDateModified").map((m) => text(m.productId)).filter(Boolean))];
 }
 
+/** Product ids and part ids, as Product Data lists them, as one entry per product with its parts, each once, in the order sent. */
+function listedProducts(items: XmlNode[]): ListedProduct[] {
+  const byId = new Map<string, ListedProduct>();
+  for (const item of items) {
+    const productId = text(item.productId);
+    if (!productId) continue;
+    const entry = byId.get(productId) ?? { productId, partIds: [] };
+    byId.set(productId, entry);
+    const partId = text(item.partId);
+    if (partId && !entry.partIds.includes(partId)) entry.partIds.push(partId);
+  }
+  return [...byId.values()];
+}
+
+/** Product Data 2.0.0 getProductSellable: every `ProductSellable` in `ProductSellableArray`, grouped by product; empty when there's none. */
+export function parseProductSellable(res: XmlNode): ListedProduct[] {
+  return listedProducts(list(res, "ProductSellableArray", "ProductSellable"));
+}
+
+/** Product Data 2.0.0 getProductDateModified: every `ProductDateModified` in `ProductDateModifiedArray`, grouped by product; empty when none changed. */
+export function parseProductDateModified(res: XmlNode): ListedProduct[] {
+  return listedProducts(list(res, "ProductDateModifiedArray", "ProductDateModified"));
+}
+
 export function parseInventory(res: XmlNode): Inventory | null {
   const inv = child(res, "Inventory");
   if (!inv) return null;
@@ -657,6 +699,37 @@ export class PromoStandardsClient {
       return parseProduct(await this.call("productData", { localizationCountry: "US", localizationLanguage: "EN", productId, partId: filter.partId, colorName: filter.colorName }));
     } catch (e) {
       if (e instanceof OpenPromoError && e.kind === "not_found") return null;
+      throw e;
+    }
+  }
+
+  /**
+   * Product Data (2.0.0) getProductSellable: every product (and its parts)
+   * the supplier sells today (`isSellable` true). One call for the whole
+   * catalog, so ask it rarely (once a day at most), never per search. Empty
+   * when the supplier lists none.
+   */
+  async getProductsSellable(): Promise<ListedProduct[]> {
+    try {
+      return parseProductSellable(await this.call("productData", { localizationCountry: "US", localizationLanguage: "EN", isSellable: true }, PRODUCT_SELLABLE));
+    } catch (e) {
+      if (e instanceof OpenPromoError && e.kind === "not_found") return [];
+      throw e;
+    }
+  }
+
+  /**
+   * Product Data (2.0.0) getProductDateModified: the products (and parts)
+   * changed since a time (ISO 8601; sent as an xsd:dateTime in UTC). Empty
+   * when none did.
+   */
+  async getProductsChanged(since: string): Promise<ListedProduct[]> {
+    const at = Date.parse(since);
+    if (Number.isNaN(at)) throw new OpenPromoError("invalid", "Say since when as an ISO time, e.g. 2026-11-01T00:00:00Z.", { supplier: this.supplier.id });
+    try {
+      return parseProductDateModified(await this.call("productData", { changeTimeStamp: new Date(at).toISOString() }, PRODUCT_DATE_MODIFIED));
+    } catch (e) {
+      if (e instanceof OpenPromoError && e.kind === "not_found") return [];
       throw e;
     }
   }
