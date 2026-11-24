@@ -493,7 +493,7 @@ describe("Media Content 1.1.0", () => {
     await expect(none.getMedia("PC54")).rejects.toMatchObject({ kind: "not_enabled" });
     // SanMar lists Media Content 1.1.0, so its PromoStandards connection has media too (SanMar's driver answers media from Product Info instead).
     expect(SANMAR_PROMOSTANDARDS.endpoints.media).toEqual({ version: "1.1.0", url: "https://ws.sanmar.com:8080/promostandards/MediaContentServiceBinding", testUrl: "https://edev-ws.sanmar.com:8080/promostandards/MediaContentServiceBinding" });
-    expect(Object.keys(promoStandardsConnection(new PromoStandardsClient(SANMAR_PROMOSTANDARDS, login)))).toEqual(["product", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media", "mediaChanges"]);
+    expect(Object.keys(promoStandardsConnection(new PromoStandardsClient(SANMAR_PROMOSTANDARDS, login)))).toEqual(["product", "productList", "productChanges", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media", "mediaChanges"]);
     const both = { ...ACME, endpoints: { ...ACME.endpoints, shipments: { version: "2.1.0", url: "https://ps.acme.example/osn21" } } };
     expect(checkSupplierConfig(both)).toEqual([]);
     expect(promoStandardsCapabilities(both)).toEqual(["shipments", "media", "mediaChanges"]);

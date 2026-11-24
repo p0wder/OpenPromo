@@ -12,8 +12,8 @@ import { ssInventory, ssInvoices, ssMedia, ssOrderStatus, ssPricing, ssProduct, 
 import { placeSsOrder, type SsOrderInput } from "./order.js";
 import type { SsOrder, SsStyle } from "./types.js";
 
-/** Every shared question but `mediaChanges`: S&S can't say whose pictures changed. */
-export interface SsActivewearConnection extends Required<Omit<SupplierConnection, "mediaChanges">> {
+/** Every shared question but `mediaChanges` and `productChanges`: S&S can't say whose pictures or products changed. */
+export interface SsActivewearConnection extends Required<Omit<SupplierConnection, "mediaChanges" | "productChanges">> {
   ss: SsActivewearClient;
 }
 
@@ -35,6 +35,8 @@ export function ssActivewearConnection(ss: SsActivewearClient): SsActivewearConn
       const style = await styleOf(productId);
       return style ? ssProduct(style, await ss.products(style.styleID)) : null;
     },
+    // The styles catalog: every style S&S sells, by its numeric style id (the product id here). It names no SKUs.
+    productList: async () => [...new Set((await ss.styles()).filter((style) => style.styleID != null).map((style) => String(style.styleID)))].map((productId) => ({ productId, partIds: [] })),
     async inventory(productId, filter) {
       const id = await styleIdOf(productId);
       const products = id ? await ss.products(id) : [];
@@ -71,7 +73,7 @@ export const ssActivewearDriver: SupplierDriver<SsActivewearConnection> = {
   id: "ssactivewear",
   name: "S&S Activewear",
   kind: "native",
-  capabilities: ["product", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media"],
+  capabilities: ["product", "productList", "inventory", "pricing", "orderStatus", "shipments", "invoices", "media"],
   login: [
     { key: "account_number", header: "X-Supplier-Id", label: "S&S account number" },
     { key: "api_key", header: "X-Supplier-Password", label: "S&S API key" },

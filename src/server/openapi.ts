@@ -40,6 +40,21 @@ export function openApiDocument(origin: string, config?: Pick<ServerConfig, "sup
       },
     },
     Media: { type: "object", required: ["productId", "items"], properties: { productId: { type: "string" }, items: { type: "array", items: { $ref: "#/components/schemas/MediaItem" } } } },
+    ListedProduct: {
+      type: "object",
+      required: ["productId", "partIds"],
+      description: "One product a supplier sells or that changed: ids only (GET /v1/{supplier}/products/{productId} for the rest).",
+      properties: { productId: { type: "string" }, partIds: { type: "array", items: { type: "string" }, description: "Its parts the supplier named, each once; empty when it lists products only (S&S's styles)" } },
+    },
+    ProductList: {
+      type: "object",
+      required: ["count", "products"],
+      properties: {
+        changedSince: { type: "string", description: "Only with ?changedSince=: the time asked, as sent" },
+        count: { type: "integer" },
+        products: { type: "array", items: { $ref: "#/components/schemas/ListedProduct" } },
+      },
+    },
     PurchaseOrder: PURCHASE_ORDER_SCHEMA,
   };
   const purchaseOrderBody = { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } };
@@ -83,8 +98,16 @@ export function openApiDocument(origin: string, config?: Pick<ServerConfig, "sup
     security: [{ bearer: [] }],
     paths: {
       "/health": { get: { summary: "Is the server up", security: [], responses: { "200": ok("ok, the version and how many suppliers it serves") } } },
-      "/v1/suppliers": { get: { summary: "The suppliers this server serves", parameters: [query("search", "Words in the id or name"), query("capability", "Only those that answer this: product, inventory, pricing, orderStatus, shipments, invoices, media, mediaChanges; or orders, for those that can take orders (GET /v1/suppliers/{id} says whether this server allows it)"), query("kind", "native or promostandards")], responses: { "200": ok("count and suppliers") } } },
+      "/v1/suppliers": { get: { summary: "The suppliers this server serves", parameters: [query("search", "Words in the id or name"), query("capability", "Only those that answer this: product, productList, productChanges, inventory, pricing, orderStatus, shipments, invoices, media, mediaChanges; or orders, for those that can take orders (GET /v1/suppliers/{id} says whether this server allows it)"), query("kind", "native or promostandards")], responses: { "200": ok("count and suppliers") } } },
       "/v1/suppliers/{supplier}": get("One supplier: its login headers, environments, what it answers and its own routes", [], "the supplier"),
+      "/v1/{supplier}/products": withSchema(
+        get(
+          "Every product the supplier sells (PromoStandards Product Data's getProductSellable; S&S's styles catalog), or with ?changedSince= those changed since a time (getProductDateModified). One call for the whole catalog: ask it once a day at most, never per search. 404 not_offered when the supplier can't answer the one asked (capability productList or productChanges).",
+          [query("changedSince", "ISO time: only the products changed since then")],
+          "{ changedSince?, count, products }, empty when there's none",
+        ),
+        "ProductList",
+      ),
       "/v1/{supplier}/products/{productId}": get("A product with its parts (colors and sizes)", [path("productId", "The supplier's product or style id")], "the product"),
       "/v1/{supplier}/products/{productId}/inventory": get("Stock per part and warehouse", [path("productId", "The supplier's product or style id"), query("partId", "Only these parts (repeat for several)")], "inventory"),
       "/v1/{supplier}/products/{productId}/pricing": get("Prices per part, with quantity breaks", [path("productId", "The supplier's product or style id"), query("priceType", "Net (default), List or Customer"), query("partId", "One part"), query("fobId", "FOB point (warehouse), PromoStandards only")], "prices"),
@@ -118,6 +141,6 @@ export function openApiDocument(origin: string, config?: Pick<ServerConfig, "sup
       },
       ...driverPaths,
     },
-    "x-schemas-note": "Response shapes are the TypeScript types exported by the openpromo package (Product, Inventory, Pricing, OrderStatus, Shipment, Invoice, Media, and each driver's own).",
+    "x-schemas-note": "Response shapes are the TypeScript types exported by the openpromo package (Product, ProductList, Inventory, Pricing, OrderStatus, Shipment, Invoice, Media, and each driver's own).",
   } as const;
 }

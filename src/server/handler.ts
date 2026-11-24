@@ -7,7 +7,7 @@
  */
 import { createHash, timingSafeEqual } from "node:crypto";
 import { OpenPromoError, type OpenPromoErrorKind } from "../errors.js";
-import type { InvoiceQuery, MediaType, PriceType } from "../promostandards/types.js";
+import type { InvoiceQuery, MediaType, PriceType, ProductList } from "../promostandards/types.js";
 import { CAPABILITIES, type Capability, type DriverRoute, type SupplierConnection } from "../suppliers/driver.js";
 import { connectionFor, environmentHeader, mayOrder, ordersOffMessage, type ServerConfig, type SupplierDef } from "./config.js";
 import { openApiDocument } from "./openapi.js";
@@ -183,6 +183,20 @@ export function createHandler(config: ServerConfig, opts: HandlerOptions = {}): 
     };
     const offers = (capability: Capability) => def.driver.capabilities.includes(capability);
     const notOffered = (capability: Capability) => fail("not_offered", `${def.name} doesn't offer ${capability} through OpenPromo. See GET /v1/suppliers/${def.id}.`, { supplier: def.id });
+
+    // GET /v1/{supplier}/products: every product it sells; ?changedSince=<ISO time>: those changed since then. One shape for both.
+    if (method === "GET" && rest[0] === "products" && rest.length === 1) {
+      const changedSince = url.searchParams.get("changedSince");
+      if (changedSince === null) {
+        if (!offers("productList")) return notOffered("productList");
+        const products = await ask("productList")();
+        return json(200, { count: products.length, products } satisfies ProductList);
+      }
+      if (!offers("productChanges")) return notOffered("productChanges");
+      if (!/^\d{4}-\d{2}-\d{2}/.test(changedSince) || Number.isNaN(Date.parse(changedSince))) throw new OpenPromoError("invalid", "Say since when: ?changedSince=<ISO time>, e.g. 2026-11-01T00:00:00Z.");
+      const products = await ask("productChanges")(changedSince);
+      return json(200, { changedSince, count: products.length, products } satisfies ProductList);
+    }
 
     if (method === "GET" && rest[0] === "products" && rest[1] && rest.length <= 3) {
       const id = rest[1];
